@@ -109,6 +109,9 @@ class BattleScene extends Phaser.Scene {
         const arenaTypes = ['default', 'ground_only', 'spike_arena', 'lava_arena'];
         const selectedArena = Phaser.Utils.Array.GetRandom(arenaTypes);
 
+        // Store the arena type for collision detection
+        this.arenaType = selectedArena;
+
         console.log(`Selected arena: ${selectedArena}`);
 
         switch (selectedArena) {
@@ -126,6 +129,7 @@ class BattleScene extends Phaser.Scene {
                 break;
             default:
                 console.warn(`Unknown arena type: ${selectedArena}, defaulting to default arena`);
+                this.arenaType = 'default';
                 this.createDefaultArena();
                 break;
         }
@@ -874,8 +878,8 @@ class BattleScene extends Phaser.Scene {
             }
         }
 
-        // Special check for ground arena - make players fall if outside ground bounds
-        if (this.actualGroundLeft !== undefined && this.actualGroundRight !== undefined && player.body.grounded) {
+        // Special check for ground_only arena - make players fall if outside ground bounds
+        if (this.arenaType === 'ground_only' && player.body.grounded) {
             const playerCenterX = player.body.x + player.body.width / 2;
             // If player is grounded but outside the actual ground platform, make them fall
             if (playerCenterX < this.actualGroundLeft || playerCenterX > this.actualGroundRight) {
@@ -885,8 +889,8 @@ class BattleScene extends Phaser.Scene {
 
         // Ground collision - check if player is on actual ground platform
         if (player.body.y + player.body.height >= this.groundY) {
-            // Check if this is ground arena with smaller platform
-            if (this.actualGroundLeft !== undefined && this.actualGroundRight !== undefined) {
+            // Check if this is ground_only arena with smaller platform
+            if (this.arenaType === 'ground_only') {
                 // Ground arena - only land on ground if player is AT ground level AND within ground bounds
                 const playerCenterX = player.body.x + player.body.width / 2;
                 const playerAtGroundLevel = player.body.y + player.body.height >= this.groundY && player.body.y + player.body.height <= this.groundY + 10;
@@ -897,19 +901,20 @@ class BattleScene extends Phaser.Scene {
                     player.body.grounded = true;
                 }
                 // If outside ground bounds OR not at ground level, player continues falling
-            } else {
-                // Other arenas - normal ground collision with safety bounds
+            } else if (this.arenaType === 'default' || this.arenaType === 'spike_arena') {
+                // Default and spike arenas - normal ground collision with safety bounds
                 if (player.body.y + player.body.height > this.groundY) {
                     player.body.y = this.groundY - player.body.height;
                     player.body.velocityY = 0;
                     player.body.grounded = true;
                 }
             }
+            // Lava arena - no ground collision, players fall into lava
         }
 
-        // Safety check - prevent falling through ground in any arena (except ground arena with platform bounds)
-        if (player.body.y + player.body.height > this.groundY && !this.actualGroundLeft && !this.actualGroundRight) {
-            // Force player back to ground level if they somehow got below it (default and spike arenas)
+        // Safety check - prevent falling through ground in default and spike arenas only
+        if (player.body.y + player.body.height > this.groundY && (this.arenaType === 'default' || this.arenaType === 'spike_arena')) {
+            // Force player back to ground level if they somehow got below it (default and spike arenas only)
             player.body.y = this.groundY - player.body.height;
             player.body.velocityY = 0;
             player.body.grounded = true;
