@@ -8,15 +8,17 @@ class InstructionsScene extends Phaser.Scene {
         const centerY = this.cameras.main.centerY;
 
         // Dark overlay
-        this.add.rectangle(centerX, centerY, 1200, 800, 0x000000, 0.9);
+        this.add.rectangle(centerX, centerY, this.cameras.main.width, this.cameras.main.height, 0x000000, 0.9);
 
-        // Instructions popup with improved styling
-        const popupShadow = this.add.rectangle(centerX + 5, centerY + 5, 820, 650, 0x000000, 0.4);
-        const popup = this.add.rectangle(centerX, centerY, 820, 650, 0x1e293b)
+        // Instructions popup with improved styling (sized for 1280x720)
+        const popupWidth = 800;
+        const popupHeight = 600;
+        const popupShadow = this.add.rectangle(centerX + 5, centerY + 5, popupWidth, popupHeight, 0x000000, 0.4);
+        const popup = this.add.rectangle(centerX, centerY, popupWidth, popupHeight, 0x1e293b)
             .setStrokeStyle(4, 0x8b5cf6);
 
         // Popup glow effect
-        const glow = this.add.rectangle(centerX, centerY, 840, 670, 0x8b5cf6, 0.1);
+        const glow = this.add.rectangle(centerX, centerY, popupWidth + 20, popupHeight + 20, 0x8b5cf6, 0.1);
 
 
         // Instructions text with better spacing

@@ -76,8 +76,7 @@ class CharacterSelectionScene extends Phaser.Scene {
         // Stat choices
         const choices = [
             { key: 'damage', label: 'PATH OF FURY', desc: 'Unleash devastating power, risk frailty', color: 0xe74c3c },
-            { key: 'health', label: 'PATH OF ENDURANCE', desc: 'Become unbreakable, temper your strike', color: 0x27ae60 },
-            { key: 'balanced', label: 'PATH OF BALANCE', desc: 'Walk the middle road of ancient masters', color: 0x3498db }
+            { key: 'health', label: 'PATH OF ENDURANCE', desc: 'Become unbreakable, temper your strike', color: 0x27ae60 }
         ];
 
         choices.forEach((choice, index) => {

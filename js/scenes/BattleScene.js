@@ -258,10 +258,8 @@ class BattleScene extends Phaser.Scene {
                 return { health: 80, damage: 25, speed: 200 };
             case 'health': // PATH OF ENDURANCE
                 return { health: 120, damage: 15, speed: 200 };
-            case 'balanced': // PATH OF BALANCE
-                return { health: 100, damage: 20, speed: 200 };
             default:
-                return { health: 100, damage: 20, speed: 200 };
+                return { health: 80, damage: 25, speed: 200 }; // Default to PATH OF FURY
         }
     }
 

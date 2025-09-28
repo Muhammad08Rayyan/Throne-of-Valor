@@ -1,26 +1,8 @@
-// Game initialization with responsive canvas sizing
-function getCanvasConfig() {
-    const screenWidth = window.screen.width;
-    const screenHeight = window.screen.height;
-
-    // Support for common resolutions
-    if (screenWidth >= 1920 && screenHeight >= 1080) {
-        return { width: 1920, height: 1080 };
-    } else if (screenWidth >= 1600 && screenHeight >= 1000) {
-        return { width: 1600, height: 1000 };
-    } else if (screenWidth >= 1280 && screenHeight >= 720) {
-        return { width: 1280, height: 720 };
-    } else {
-        return { width: 1280, height: 720 }; // Fallback
-    }
-}
-
-const canvasConfig = getCanvasConfig();
-
+// Game configuration fixed to 1280x720 resolution
 const config = {
     type: Phaser.AUTO,
-    width: canvasConfig.width,
-    height: canvasConfig.height,
+    width: 1280,
+    height: 720,
     parent: 'game-container',
     backgroundColor: '#0f172a',
     scene: [
@@ -32,16 +14,8 @@ const config = {
         TournamentResultsScene
     ],
     scale: {
-        mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
-        min: {
-            width: 1280,
-            height: 720
-        },
-        max: {
-            width: 1920,
-            height: 1080
-        }
+        mode: Phaser.Scale.NONE,
+        autoCenter: Phaser.Scale.CENTER_BOTH
     }
 };
 

@@ -229,7 +229,7 @@ class MainMenuScene extends Phaser.Scene {
             tournamentData.players.push({
                 id: i,
                 name: `Player ${i}`,
-                statChoice: 'balanced',
+                statChoice: 'damage',
                 eliminated: false
             });
         }
