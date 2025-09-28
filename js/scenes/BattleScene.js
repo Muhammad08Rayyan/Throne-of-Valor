@@ -1161,7 +1161,7 @@ class BattleScene extends Phaser.Scene {
 
         // Play dash sound
         if (window.audioManager) {
-            window.audioManager.playSound('buttonClick'); // Dash sound
+            window.audioManager.playSound('dashWhoosh'); // Dash sound
         }
 
         // Calculate dash direction based on key pressed
@@ -1462,13 +1462,13 @@ class BattleScene extends Phaser.Scene {
                     window.audioManager.playSound('swordHit'); // Metallic clang for sword hit
                     break;
                 case 'gun':
-                    window.audioManager.playSound('swordSwing'); // Sharp impact for bullet hit
+                    window.audioManager.playSound('gunShot'); // Gun impact sound
                     break;
                 case 'shield':
                     window.audioManager.playSound('swordSwing'); // Heavy thud for shield bash hit
                     break;
                 case 'punch':
-                    window.audioManager.playSound('buttonClick'); // Sharp thud for punch hit
+                    window.audioManager.playSound('heavyHit'); // Sharp thud for punch hit
                     break;
             }
         }
@@ -1689,6 +1689,7 @@ class BattleScene extends Phaser.Scene {
                 if (window.audioManager) {
                     window.audioManager.playSound('buttonClick');
                 }
+                this.cleanupAmbientAudio();
                 this.scene.start('TournamentResultsScene');
             });
             resultsButton.on('pointerover', () => {
@@ -1775,6 +1776,7 @@ class BattleScene extends Phaser.Scene {
                 }
             }
             this.registry.set('tournamentData', tournamentData);
+            this.cleanupAmbientAudio();
             this.scene.start('CharacterSelectionScene');
         } else {
             // Round complete, advance to next round
@@ -1825,11 +1827,13 @@ class BattleScene extends Phaser.Scene {
         }
 
         this.registry.set('tournamentData', tournamentData);
+        this.cleanupAmbientAudio();
         this.scene.start('CharacterSelectionScene');
     }
 
     viewBracket() {
         // Don't reset tournament when viewing bracket
+        this.cleanupAmbientAudio();
         this.scene.start('TournamentBracketScene');
     }
 
@@ -2047,11 +2051,20 @@ class BattleScene extends Phaser.Scene {
         // Handle potion differently - immediate use
         if (weapon.type === 'potion') {
             this.usePotion(player);
+            // Play healing pickup sound
+            if (window.audioManager) {
+                window.audioManager.playSound('healthPickup');
+            }
 
             // Remove weapon from field
             weapon.sprite.destroy();
             this.weapons.splice(weaponIndex, 1);
             return;
+        }
+
+        // Play weapon pickup sound
+        if (window.audioManager) {
+            window.audioManager.playSound('weaponPickup');
         }
 
         // Remove old weapon if player has one
@@ -2182,7 +2195,7 @@ class BattleScene extends Phaser.Scene {
 
         // Play gun shot sound
         if (window.audioManager) {
-            window.audioManager.playSound('buttonClick'); // Gun shot sound (sharp click for gunshot)
+            window.audioManager.playSound('gunShot'); // Gun shot sound
         }
 
         // Muzzle flash effect
@@ -2563,6 +2576,17 @@ class BattleScene extends Phaser.Scene {
         this.arenaRight = this.cameras.main.width * 0.9; // 10% from right
         this.groundY = this.cameras.main.height * 0.75; // 75% down the screen
 
+        // Play menacing spike danger sound periodically
+        if (window.audioManager) {
+            this.spikeTimer = this.time.addEvent({
+                delay: 8000, // Every 8 seconds
+                callback: () => {
+                    window.audioManager.playSound('spikeDanger');
+                },
+                loop: true
+            });
+        }
+
         // Create jail dungeon background
         const bg = this.add.rectangle(this.cameras.main.centerX, this.cameras.main.centerY,
             this.cameras.main.width, this.cameras.main.height, 0x0D0D0D).setDepth(-100);
@@ -2577,25 +2601,30 @@ class BattleScene extends Phaser.Scene {
             }
         }
 
-        // Create jail floor
-        const groundWidth = this.arenaRight - this.arenaLeft;
+        // Create jail floor - bigger platform with spikes on the edges
+        const platformWidth = (this.arenaRight - this.arenaLeft) * 0.7; // 70% of arena width
+        const platformStartX = this.arenaLeft + (this.arenaRight - this.arenaLeft - platformWidth) / 2; // Center it
         const ground = this.add.rectangle(
-            this.arenaLeft + groundWidth / 2,
+            platformStartX + platformWidth / 2,
             this.groundY + 25,
-            groundWidth,
+            platformWidth,
             50,
             0x2A2A2A
         );
         ground.setDepth(-20);
 
-        // Add floor stone pattern
+        // Add floor stone pattern - only on the platform
         const floorPattern = this.add.graphics();
         floorPattern.lineStyle(2, 0x1A1A1A);
-        for (let x = this.arenaLeft; x < this.arenaRight; x += 30) {
+        for (let x = platformStartX; x < platformStartX + platformWidth; x += 30) {
             floorPattern.moveTo(x, this.groundY);
             floorPattern.lineTo(x, this.groundY + 50);
         }
         floorPattern.setDepth(-19);
+
+        // Store platform bounds for collision detection
+        this.actualGroundLeft = platformStartX;
+        this.actualGroundRight = platformStartX + platformWidth;
 
         // Create spike hazards
         this.hazards = [];
@@ -2603,35 +2632,35 @@ class BattleScene extends Phaser.Scene {
         // Calculate ceiling spike level
         const topSpikeY = this.groundY - 200; // Only 200 pixels above ground (players jump ~400)
 
-        // Left wall jail spikes - only extend to top spikes
+        // Left platform edge spikes
         const leftSpikeHeight = this.groundY - topSpikeY; // Height from ground to ceiling spikes
         const leftSpikes = this.add.graphics();
         leftSpikes.fillStyle(0x4A4A4A); // Steel grey for jail bars
         for (let y = topSpikeY; y < this.groundY; y += 35) {
             leftSpikes.fillTriangle(
-                this.arenaLeft, y,
-                this.arenaLeft + 25, y + 17,
-                this.arenaLeft, y + 35
+                platformStartX - 25, y,
+                platformStartX, y + 17,
+                platformStartX - 25, y + 35
             );
         }
         leftSpikes.setDepth(-10);
 
-        // Right wall jail spikes - only extend to top spikes
+        // Right platform edge spikes
         const rightSpikes = this.add.graphics();
         rightSpikes.fillStyle(0x4A4A4A); // Steel grey for jail bars
         for (let y = topSpikeY; y < this.groundY; y += 35) {
             rightSpikes.fillTriangle(
-                this.arenaRight, y,
-                this.arenaRight - 25, y + 17,
-                this.arenaRight, y + 35
+                platformStartX + platformWidth + 25, y,
+                platformStartX + platformWidth, y + 17,
+                platformStartX + platformWidth + 25, y + 35
             );
         }
         rightSpikes.setDepth(-10);
 
-        // Top ceiling spikes - menacing jail ceiling
+        // Top ceiling spikes - only over the platform area
         const topSpikes = this.add.graphics();
         topSpikes.fillStyle(0x4A4A4A); // Steel grey
-        for (let x = this.arenaLeft; x < this.arenaRight; x += 45) {
+        for (let x = platformStartX - 25; x < platformStartX + platformWidth + 25; x += 45) {
             topSpikes.fillTriangle(
                 x, topSpikeY,
                 x + 22, topSpikeY + 35,
@@ -2684,9 +2713,12 @@ class BattleScene extends Phaser.Scene {
 
         // Store hazard areas for collision detection
         this.hazards = [
-            { type: 'spikes', x: this.arenaLeft, y: topSpikeY, width: 25, height: leftSpikeHeight }, // Left wall
-            { type: 'spikes', x: this.arenaRight - 25, y: topSpikeY, width: 25, height: leftSpikeHeight }, // Right wall
-            { type: 'spikes', x: this.arenaLeft, y: topSpikeY, width: this.arenaRight - this.arenaLeft, height: 35 } // Top ceiling
+            { type: 'spikes', x: platformStartX - 25, y: topSpikeY, width: 25, height: leftSpikeHeight }, // Left platform edge
+            { type: 'spikes', x: platformStartX + platformWidth, y: topSpikeY, width: 25, height: leftSpikeHeight }, // Right platform edge
+            { type: 'spikes', x: platformStartX - 25, y: topSpikeY, width: platformWidth + 50, height: 35 }, // Top ceiling over platform
+            // Side fall hazards - left and right of platform
+            { type: 'void', x: this.arenaLeft, y: this.groundY + 60, width: platformStartX - this.arenaLeft, height: 200 }, // Left void
+            { type: 'void', x: platformStartX + platformWidth, y: this.groundY + 60, width: this.arenaRight - (platformStartX + platformWidth), height: 200 } // Right void
         ];
 
         // No platforms
@@ -2701,6 +2733,12 @@ class BattleScene extends Phaser.Scene {
         this.arenaLeft = this.cameras.main.width * 0.1; // 10% from left
         this.arenaRight = this.cameras.main.width * 0.9; // 10% from right
         this.groundY = this.cameras.main.height; // No ground - lava below
+
+        // Start lava ambient audio
+        if (window.audioManager && window.audioManager.sounds.lavaAmbient) {
+            this.lavaAmbient = window.audioManager.sounds.lavaAmbient;
+            this.lavaAmbient.start();
+        }
 
         // Create dramatic hellish background with gradient
         const bg = this.add.rectangle(this.cameras.main.centerX, this.cameras.main.centerY,
@@ -2912,6 +2950,20 @@ class BattleScene extends Phaser.Scene {
                 x + layerWidth / 3, y,
                 x, y - layerHeight
             );
+        }
+    }
+
+    cleanupAmbientAudio() {
+        // Stop lava ambient sound if it exists
+        if (this.lavaAmbient && this.lavaAmbient.stop) {
+            this.lavaAmbient.stop();
+            this.lavaAmbient = null;
+        }
+
+        // Stop spike timer if it exists
+        if (this.spikeTimer) {
+            this.spikeTimer.destroy();
+            this.spikeTimer = null;
         }
     }
 }
