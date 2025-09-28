@@ -31,6 +31,14 @@ class BattleScene extends Phaser.Scene {
         this.dashCooldown1 = 0;
         this.dashCooldown2 = 0;
 
+        // Weapon system
+        this.weapons = [];
+        this.weaponSpawnTimer = 0;
+        this.weaponSpawnInterval = 5000; // 5 seconds
+
+        // Bullet system
+        this.bullets = [];
+
         // Double-tap tracking for dash
         this.lastKeyPress1 = { key: null, time: 0 };
         this.lastKeyPress2 = { key: null, time: 0 };
@@ -50,6 +58,19 @@ class BattleScene extends Phaser.Scene {
         this.dashCooldown1 = 0;
         this.dashCooldown2 = 0;
 
+        // Clean up weapons
+        this.weapons.forEach(weapon => {
+            if (weapon.sprite) weapon.sprite.destroy();
+        });
+        this.weapons = [];
+        this.weaponSpawnTimer = 0;
+
+        // Clean up bullets
+        this.bullets.forEach(bullet => {
+            if (bullet.sprite) bullet.sprite.destroy();
+        });
+        this.bullets = [];
+
         // Arena bounds will be set in createArena() based on background image
 
         // Get current match data
@@ -65,8 +86,8 @@ class BattleScene extends Phaser.Scene {
             window.audioManager.playMusic('battleMusic');
         }
 
-        // Create arena background
-        this.createArena();
+        // Create arena background with random selection
+        this.createRandomArena();
 
         // Create players based on their stat choices
         this.createPlayer1(currentMatch.player1);
@@ -83,7 +104,34 @@ class BattleScene extends Phaser.Scene {
     }
 
 
-    createArena() {
+    createRandomArena() {
+        // Randomly select arena type
+        const arenaTypes = ['default', 'ground_only', 'spike_arena', 'lava_arena'];
+        const selectedArena = Phaser.Utils.Array.GetRandom(arenaTypes);
+
+        console.log(`Selected arena: ${selectedArena}`);
+
+        switch (selectedArena) {
+            case 'default':
+                this.createDefaultArena();
+                break;
+            case 'ground_only':
+                this.createGroundOnlyArena();
+                break;
+            case 'spike_arena':
+                this.createSpikeArena();
+                break;
+            case 'lava_arena':
+                this.createLavaArena();
+                break;
+            default:
+                console.warn(`Unknown arena type: ${selectedArena}, defaulting to default arena`);
+                this.createDefaultArena();
+                break;
+        }
+    }
+
+    createDefaultArena() {
         // Set arena bounds immediately (CRITICAL - must happen before character creation)
         this.arenaLeft = this.cameras.main.width * 0.1; // 10% from left
         this.arenaRight = this.cameras.main.width * 0.9; // 10% from right
@@ -182,8 +230,26 @@ class BattleScene extends Phaser.Scene {
     createPlayer1(playerData) {
         const stats = this.getPlayerStats(playerData.statChoice);
 
+        // Determine spawn position based on arena type
+        let spawnX = 200;
+        let spawnY = this.groundY - 25;
+
+        // Special positioning for lava arena - spawn on leftmost platform
+        if (this.platforms && this.platforms.length === 4) {
+            // Lava arena detected (has 4 platforms)
+            const leftmostPlatform = this.platforms[0];
+            spawnX = leftmostPlatform.x + leftmostPlatform.width / 2;
+            spawnY = leftmostPlatform.y - 25;
+        }
+        // Special positioning for ground arena - spawn on actual ground platform
+        else if (this.actualGroundLeft !== undefined && this.actualGroundRight !== undefined) {
+            // Ground arena - spawn on left side of the actual ground
+            spawnX = this.actualGroundLeft + (this.actualGroundRight - this.actualGroundLeft) * 0.25;
+            spawnY = this.groundY - 25;
+        }
+
         // Create warrior container
-        this.player1 = this.add.container(200, this.groundY - 25);
+        this.player1 = this.add.container(spawnX, spawnY);
 
         // Create warrior parts - fix color scheme (blue team gets blue clothes)
         this.player1.parts = this.createWarriorParts('red');
@@ -209,6 +275,8 @@ class BattleScene extends Phaser.Scene {
         this.player1.isDashing = false;
         this.player1.isWalking = false;
         this.player1.walkFrame = 0;
+        this.player1.weapon = null; // No weapon by default
+        this.player1.knockbackTime = 0; // For knockback effects
 
         // Attack hitbox (invisible)
         this.player1.attackHitbox = this.add.rectangle(0, 0, 60, 40, 0xff0000, 0);
@@ -217,8 +285,26 @@ class BattleScene extends Phaser.Scene {
     createPlayer2(playerData) {
         const stats = this.getPlayerStats(playerData.statChoice);
 
+        // Determine spawn position based on arena type
+        let spawnX = this.cameras.main.width - 200;
+        let spawnY = this.groundY - 25;
+
+        // Special positioning for lava arena - spawn on rightmost platform
+        if (this.platforms && this.platforms.length === 4) {
+            // Lava arena detected (has 4 platforms)
+            const rightmostPlatform = this.platforms[3]; // Last platform (index 3)
+            spawnX = rightmostPlatform.x + rightmostPlatform.width / 2;
+            spawnY = rightmostPlatform.y - 25;
+        }
+        // Special positioning for ground arena - spawn on actual ground platform
+        else if (this.actualGroundLeft !== undefined && this.actualGroundRight !== undefined) {
+            // Ground arena - spawn on right side of the actual ground
+            spawnX = this.actualGroundLeft + (this.actualGroundRight - this.actualGroundLeft) * 0.75;
+            spawnY = this.groundY - 25;
+        }
+
         // Create warrior container
-        this.player2 = this.add.container(this.cameras.main.width - 200, this.groundY - 25);
+        this.player2 = this.add.container(spawnX, spawnY);
 
         // Create warrior parts - fix color scheme (red team gets red clothes)
         this.player2.parts = this.createWarriorParts('blue');
@@ -247,6 +333,8 @@ class BattleScene extends Phaser.Scene {
         this.player2.isDashing = false;
         this.player2.isWalking = false;
         this.player2.walkFrame = 0;
+        this.player2.weapon = null; // No weapon by default
+        this.player2.knockbackTime = 0; // For knockback effects
 
         // Attack hitbox (invisible)
         this.player2.attackHitbox = this.add.rectangle(0, 0, 60, 40, 0xff0000, 0);
@@ -364,7 +452,16 @@ class BattleScene extends Phaser.Scene {
                 this.timerText.setText(this.battleTimer.toString());
 
                 if (this.battleTimer <= 0) {
-                    this.endBattle('time');
+                    // Calculate health percentages
+                    const player1HealthPercent = (this.player1.health / this.player1.stats.health) * 100;
+                    const player2HealthPercent = (this.player2.health / this.player2.stats.health) * 100;
+
+                    // Check if health percentages are the same (within 1% tolerance)
+                    if (Math.abs(player1HealthPercent - player2HealthPercent) <= 1) {
+                        this.startSuddenDeath();
+                    } else {
+                        this.endBattle('time');
+                    }
                 }
             },
             repeat: 29
@@ -425,14 +522,7 @@ class BattleScene extends Phaser.Scene {
         parts.rightLeg.lineStyle(1, scheme.dark);
         parts.rightLeg.strokeEllipse(5, 15, 6, 15);
 
-        // Sword
-        parts.sword = this.add.graphics();
-        parts.sword.lineStyle(3, 0xc0c0c0);
-        parts.sword.lineBetween(15, -10, 15, -25); // Blade
-        parts.sword.lineStyle(5, scheme.accent);
-        parts.sword.lineBetween(15, -8, 15, -5); // Hilt
-        parts.sword.fillStyle(0xffd700);
-        parts.sword.fillCircle(15, -5, 2); // Pommel
+        // No weapon by default - players start with fists
 
         // Store references for animation
         return parts;
@@ -468,6 +558,16 @@ class BattleScene extends Phaser.Scene {
         this.dashCooldown1 = Math.max(0, this.dashCooldown1 - delta);
         this.dashCooldown2 = Math.max(0, this.dashCooldown2 - delta);
 
+        // Update knockback times
+        this.player1.knockbackTime = Math.max(0, this.player1.knockbackTime - delta);
+        this.player2.knockbackTime = Math.max(0, this.player2.knockbackTime - delta);
+
+        // Update weapon spawning
+        this.updateWeaponSpawning(delta);
+
+        // Update bullets
+        this.updateBullets(delta);
+
         // Handle player input and movement
         this.handlePlayer1Input(delta);
         this.handlePlayer2Input(delta);
@@ -485,6 +585,9 @@ class BattleScene extends Phaser.Scene {
 
         // Check for attacks
         this.checkAttacks();
+
+        // Check for weapon pickups
+        this.checkWeaponPickups();
     }
 
     handlePlayer1Input(delta) {
@@ -549,16 +652,20 @@ class BattleScene extends Phaser.Scene {
             height: player.body.height
         };
 
-        // Only apply movement if no collision
+        // Only apply movement if no collision and not in knockback
         if (!this.checkPlayerCollision(tempBody, otherPlayer.body)) {
-            player.body.velocityX = intendedVelocityX;
+            if (player.knockbackTime <= 0) {
+                player.body.velocityX = intendedVelocityX;
+            }
         } else {
-            player.body.velocityX = 0;
+            if (player.knockbackTime <= 0) {
+                player.body.velocityX = 0;
+            }
             player.isWalking = false;
         }
 
-        // Apply friction when not moving
-        if (intendedVelocityX === 0) {
+        // Apply friction when not moving (but not during knockback)
+        if (intendedVelocityX === 0 && player.knockbackTime <= 0) {
             player.body.velocityX *= 0.8;
         }
 
@@ -648,16 +755,20 @@ class BattleScene extends Phaser.Scene {
             height: player.body.height
         };
 
-        // Only apply movement if no collision
+        // Only apply movement if no collision and not in knockback
         if (!this.checkPlayerCollision(tempBody, otherPlayer.body)) {
-            player.body.velocityX = intendedVelocityX;
+            if (player.knockbackTime <= 0) {
+                player.body.velocityX = intendedVelocityX;
+            }
         } else {
-            player.body.velocityX = 0;
+            if (player.knockbackTime <= 0) {
+                player.body.velocityX = 0;
+            }
             player.isWalking = false;
         }
 
-        // Apply friction when not moving
-        if (intendedVelocityX === 0) {
+        // Apply friction when not moving (but not during knockback)
+        if (intendedVelocityX === 0 && player.knockbackTime <= 0) {
             player.body.velocityX *= 0.8;
         }
 
@@ -763,8 +874,42 @@ class BattleScene extends Phaser.Scene {
             }
         }
 
-        // Ground collision
+        // Special check for ground arena - make players fall if outside ground bounds
+        if (this.actualGroundLeft !== undefined && this.actualGroundRight !== undefined && player.body.grounded) {
+            const playerCenterX = player.body.x + player.body.width / 2;
+            // If player is grounded but outside the actual ground platform, make them fall
+            if (playerCenterX < this.actualGroundLeft || playerCenterX > this.actualGroundRight) {
+                player.body.grounded = false;
+            }
+        }
+
+        // Ground collision - check if player is on actual ground platform
         if (player.body.y + player.body.height >= this.groundY) {
+            // Check if this is ground arena with smaller platform
+            if (this.actualGroundLeft !== undefined && this.actualGroundRight !== undefined) {
+                // Ground arena - only land on ground if player is AT ground level AND within ground bounds
+                const playerCenterX = player.body.x + player.body.width / 2;
+                const playerAtGroundLevel = player.body.y + player.body.height >= this.groundY && player.body.y + player.body.height <= this.groundY + 10;
+
+                if (playerAtGroundLevel && playerCenterX >= this.actualGroundLeft && playerCenterX <= this.actualGroundRight) {
+                    player.body.y = this.groundY - player.body.height;
+                    player.body.velocityY = 0;
+                    player.body.grounded = true;
+                }
+                // If outside ground bounds OR not at ground level, player continues falling
+            } else {
+                // Other arenas - normal ground collision with safety bounds
+                if (player.body.y + player.body.height > this.groundY) {
+                    player.body.y = this.groundY - player.body.height;
+                    player.body.velocityY = 0;
+                    player.body.grounded = true;
+                }
+            }
+        }
+
+        // Safety check - prevent falling through ground in any arena (except ground arena with platform bounds)
+        if (player.body.y + player.body.height > this.groundY && !this.actualGroundLeft && !this.actualGroundRight) {
+            // Force player back to ground level if they somehow got below it (default and spike arenas)
             player.body.y = this.groundY - player.body.height;
             player.body.velocityY = 0;
             player.body.grounded = true;
@@ -773,6 +918,111 @@ class BattleScene extends Phaser.Scene {
         // Update sprite position
         player.x = player.body.x + player.body.width / 2;
         player.y = player.body.y + player.body.height / 2;
+
+        // Check hazard collisions
+        this.checkHazardCollisions(player);
+
+        // Check arena wall collisions (for default arena)
+        this.checkArenaWallCollisions(player);
+
+        // Death boundary check (backup - hazard system is primary)
+        if (this.deathBoundary && player.body.y > this.deathBoundary) {
+            // Player fell off the arena - backup system
+            const winner = player === this.player1 ? this.player2 : this.player1;
+            this.createDeathEffect(player.x, player.y, 'void');
+            this.endBattle('hazard', winner);
+        }
+    }
+
+    checkHazardCollisions(player) {
+        if (!this.hazards || this.hazards.length === 0) return;
+
+        const playerLeft = player.body.x;
+        const playerRight = player.body.x + player.body.width;
+        const playerTop = player.body.y;
+        const playerBottom = player.body.y + player.body.height;
+
+        for (const hazard of this.hazards) {
+            const hazardLeft = hazard.x;
+            const hazardRight = hazard.x + hazard.width;
+            const hazardTop = hazard.y;
+            const hazardBottom = hazard.y + hazard.height;
+
+            // Check if player overlaps with hazard
+            if (playerRight > hazardLeft &&
+                playerLeft < hazardRight &&
+                playerBottom > hazardTop &&
+                playerTop < hazardBottom) {
+
+                // Instant death!
+                const winner = player === this.player1 ? this.player2 : this.player1;
+
+                // Create death effect
+                this.createDeathEffect(player.x, player.y, hazard.type);
+
+                // End battle immediately
+                this.endBattle('hazard', winner);
+                return;
+            }
+        }
+    }
+
+    createDeathEffect(x, y, hazardType) {
+        let effectColor = 0xFF0000; // Default red
+        let effectText = 'DEATH!';
+
+        if (hazardType === 'lava') {
+            effectColor = 0xFF4500;
+            effectText = 'LAVA DEATH!';
+        } else if (hazardType === 'spikes') {
+            effectColor = 0xFF0000;
+            effectText = 'SPIKED!';
+        } else if (hazardType === 'void') {
+            effectColor = 0x800080;
+            effectText = 'RING OUT!';
+        }
+
+        // Create explosion effect
+        for (let i = 0; i < 12; i++) {
+            const particle = this.add.circle(
+                x + Phaser.Math.Between(-20, 20),
+                y + Phaser.Math.Between(-20, 20),
+                Phaser.Math.Between(3, 8),
+                effectColor,
+                0.8
+            );
+
+            this.tweens.add({
+                targets: particle,
+                x: particle.x + Phaser.Math.Between(-60, 60),
+                y: particle.y + Phaser.Math.Between(-60, 60),
+                alpha: 0,
+                scaleX: 0,
+                scaleY: 0,
+                duration: 600,
+                onComplete: () => particle.destroy()
+            });
+        }
+
+        // Death text
+        const deathText = this.add.text(x, y - 40, effectText, {
+            fontSize: '32px',
+            fill: '#FF0000',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: deathText,
+            y: deathText.y - 80,
+            scaleX: 2,
+            scaleY: 2,
+            alpha: 0,
+            duration: 1000,
+            ease: 'Power2',
+            onComplete: () => deathText.destroy()
+        });
     }
 
     flipPlayer(player, facingRight) {
@@ -823,33 +1073,71 @@ class BattleScene extends Phaser.Scene {
     performAttack(player, playerNum) {
         if (!player.parts) return;
 
-        // Play sword swing sound
+        // Play attack/miss sound - we'll check for hit later
         if (window.audioManager) {
-            window.audioManager.playSound('swordSwing');
+            if (player.weapon && player.weapon.type === 'sword') {
+                window.audioManager.playSound('swordSwing'); // Sword whoosh sound
+            } else if (player.weapon && player.weapon.type === 'gun') {
+                // Gun shot sound will be played in fireBullet
+            } else if (player.weapon && player.weapon.type === 'shield') {
+                window.audioManager.playSound('swordHit'); // Shield bash sound
+            } else {
+                window.audioManager.playSound('buttonHover'); // Punch whoosh sound (lighter than click)
+            }
         }
 
-        // Sword swing animation
-        const sword = player.parts.sword;
-        // Always swing downward regardless of facing direction
-        const swingDirection = Math.PI / 3;
+        // Different animations based on weapon
+        if (player.weapon && player.weapon.type === 'sword') {
+            // Sword swing animation
+            this.tweens.add({
+                targets: player.weapon.sprite,
+                rotation: Math.PI / 3,
+                duration: 100,
+                ease: 'Power2',
+                yoyo: true
+            });
+        }
 
-        // Sword swing from top to bottom
-        this.tweens.add({
-            targets: sword,
-            rotation: swingDirection,
-            duration: 100,
-            ease: 'Power2',
-            yoyo: true
-        });
-
-        // Right arm swing animation (always downward)
-        this.tweens.add({
-            targets: player.parts.rightArm,
-            rotation: Math.PI / 4,
-            duration: 100,
-            ease: 'Power2',
-            yoyo: true
-        });
+        // Right arm attack animation (punch or sword swing)
+        if (player.weapon && player.weapon.type === 'sword') {
+            // Sword swing - from top to bottom
+            this.tweens.add({
+                targets: player.parts.rightArm,
+                rotation: Math.PI / 4,
+                duration: 100,
+                ease: 'Power2',
+                yoyo: true
+            });
+        } else if (player.weapon && player.weapon.type === 'gun') {
+            // Gun firing - slight recoil
+            this.tweens.add({
+                targets: player.parts.rightArm,
+                rotation: -Math.PI / 8,
+                duration: 80,
+                ease: 'Power2',
+                yoyo: true
+            });
+            // Fire bullet
+            this.fireBullet(player);
+        } else if (player.weapon && player.weapon.type === 'shield') {
+            // Shield bash - right arm same as normal punch for both players
+            this.tweens.add({
+                targets: player.parts.rightArm,
+                rotation: -Math.PI / 3, // Same uppercut motion as normal punch
+                duration: 100,
+                ease: 'Power2',
+                yoyo: true
+            });
+        } else {
+            // Punch - from bottom to top (uppercut style)
+            this.tweens.add({
+                targets: player.parts.rightArm,
+                rotation: -Math.PI / 3, // Negative rotation for upward punch
+                duration: 100,
+                ease: 'Power2',
+                yoyo: true
+            });
+        }
 
         // Body lunge animation
         const attackDirection = player.body.facingRight ? 1 : -1;
@@ -1013,15 +1301,38 @@ class BattleScene extends Phaser.Scene {
 
         // Check if player 1 hits player 2
         if (this.player1.isAttacking && this.player1.attackHitbox && this.checkCollision(this.player1.attackHitbox, this.player2)) {
-            this.dealDamage(this.player2, this.player1.stats.damage);
+            const damage = this.calculateDamage(this.player1);
+            this.dealDamage(this.player2, damage, this.player1.weapon ? this.player1.weapon.type : 'punch', this.player1);
             this.player1.isAttacking = false; // Prevent multiple hits
         }
 
         // Check if player 2 hits player 1
         if (this.player2.isAttacking && this.player2.attackHitbox && this.checkCollision(this.player2.attackHitbox, this.player1)) {
-            this.dealDamage(this.player1, this.player2.stats.damage);
+            const damage = this.calculateDamage(this.player2);
+            this.dealDamage(this.player1, damage, this.player2.weapon ? this.player2.weapon.type : 'punch', this.player2);
             this.player2.isAttacking = false; // Prevent multiple hits
         }
+    }
+
+    calculateDamage(player) {
+        let baseDamage = player.stats.damage;
+
+        // Apply weapon modifiers
+        if (player.weapon) {
+            switch (player.weapon.type) {
+                case 'sword':
+                    baseDamage *= 2; // Double damage with sword
+                    break;
+                case 'gun':
+                    baseDamage = baseDamage; // Same damage but ranged
+                    break;
+                case 'potion':
+                    // Potion is used for healing, not damage
+                    break;
+            }
+        }
+
+        return baseDamage;
     }
 
     checkCollision(hitbox, target) {
@@ -1041,17 +1352,44 @@ class BattleScene extends Phaser.Scene {
         }
     }
 
-    dealDamage(target, damage) {
-        target.health -= damage;
+    dealDamage(target, damage, weaponType = 'punch', attacker = null) {
+        // Apply shield damage reduction
+        let finalDamage = damage;
+        if (target.weapon && target.weapon.type === 'shield') {
+            finalDamage = Math.ceil(damage * 0.5); // 50% damage reduction, rounded up
+        }
+
+        target.health -= finalDamage;
 
         // Show damage number with style
-        const damageText = this.add.text(target.x, target.y - 40, `-${damage}`, {
+        const damageColor = (target.weapon && target.weapon.type === 'shield') ? '#66ccff' : '#ff4444';
+        const damageText = this.add.text(target.x, target.y - 40, `-${finalDamage}`, {
             fontSize: '24px',
-            fill: '#ff4444',
+            fill: damageColor,
             fontStyle: 'bold',
             stroke: '#000000',
             strokeThickness: 3
         }).setOrigin(0.5);
+
+        // Show shield block effect if damage was reduced
+        if (target.weapon && target.weapon.type === 'shield' && finalDamage < damage) {
+            const blockedText = this.add.text(target.x + 30, target.y - 60, 'BLOCKED!', {
+                fontSize: '16px',
+                fill: '#4169E1',
+                fontStyle: 'bold',
+                stroke: '#FFD700',
+                strokeThickness: 2
+            }).setOrigin(0.5);
+
+            this.tweens.add({
+                targets: blockedText,
+                y: blockedText.y - 40,
+                alpha: 0,
+                duration: 1000,
+                ease: 'Power2',
+                onComplete: () => blockedText.destroy()
+            });
+        }
 
         // Animate damage number
         this.tweens.add({
@@ -1076,9 +1414,37 @@ class BattleScene extends Phaser.Scene {
             yoyo: true
         });
 
-        // Knockback effect
-        const knockbackDirection = target === this.player1 ? -1 : 1;
-        target.body.velocityX += knockbackDirection * 150;
+        // Calculate knockback direction based on attacker position
+        let knockbackDirection = 1; // Default right
+        if (attacker) {
+            // Push target away from attacker
+            knockbackDirection = target.x > attacker.x ? 1 : -1;
+        } else {
+            // Fallback to old method if no attacker provided
+            knockbackDirection = target === this.player1 ? -1 : 1;
+        }
+
+        let knockbackForce = 200; // Default for punch
+
+        switch (weaponType) {
+            case 'sword':
+                knockbackForce = 400; // High pushback for sword
+                break;
+            case 'gun':
+                knockbackForce = 150; // Lower pushback for gun
+                break;
+            case 'punch':
+                knockbackForce = 200; // Standard pushback for punch
+                break;
+        }
+
+        // Apply stronger knockback and ensure it's applied correctly
+        target.body.velocityX = knockbackDirection * knockbackForce;
+        target.knockbackTime = 300; // 300ms of knockback immunity from friction
+
+        // Add screen shake based on weapon type
+        const shakeIntensity = weaponType === 'sword' ? 0.02 : 0.01;
+        this.cameras.main.shake(150, shakeIntensity);
 
         // Update health bar
         this.updateHealthBars();
@@ -1089,9 +1455,22 @@ class BattleScene extends Phaser.Scene {
             this.endBattle('knockout', winner);
         }
 
-        // Play hit sound
+        // Play weapon-specific hit sound
         if (window.audioManager) {
-            window.audioManager.playSound('swordHit'); // Hit sound effect
+            switch (weaponType) {
+                case 'sword':
+                    window.audioManager.playSound('swordHit'); // Metallic clang for sword hit
+                    break;
+                case 'gun':
+                    window.audioManager.playSound('swordSwing'); // Sharp impact for bullet hit
+                    break;
+                case 'shield':
+                    window.audioManager.playSound('swordSwing'); // Heavy thud for shield bash hit
+                    break;
+                case 'punch':
+                    window.audioManager.playSound('buttonClick'); // Sharp thud for punch hit
+                    break;
+            }
         }
     }
 
@@ -1107,17 +1486,14 @@ class BattleScene extends Phaser.Scene {
             duration: 200,
             onComplete: () => impactFlash.destroy()
         });
-
-        // Screen shake
-        this.cameras.main.shake(100, 0.01);
     }
 
     startSuddenDeath() {
         this.gameEnded = true;
 
         // Show sudden death message
-        const suddenDeathText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY,
-            'SUDDEN DEATH!\nFirst hit wins!', {
+        const suddenDeathText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 50,
+            'SUDDEN DEATH!', {
             fontSize: '32px',
             fill: '#ff0000',
             fontStyle: 'bold',
@@ -1457,6 +1833,460 @@ class BattleScene extends Phaser.Scene {
         this.scene.start('TournamentBracketScene');
     }
 
+    updateWeaponSpawning(delta) {
+        this.weaponSpawnTimer += delta;
+
+        if (this.weaponSpawnTimer >= this.weaponSpawnInterval) {
+            this.spawnRandomWeapon();
+            this.weaponSpawnTimer = 0;
+        }
+
+        // Update weapon lifespans
+        this.weapons = this.weapons.filter(weapon => {
+            weapon.lifespan -= delta;
+            if (weapon.lifespan <= 0) {
+                weapon.sprite.destroy();
+                return false;
+            }
+            return true;
+        });
+    }
+
+    spawnRandomWeapon() {
+        // Don't spawn if we already have a weapon on the field
+        if (this.weapons.length > 0) return;
+
+        const weaponTypes = ['sword', 'gun', 'potion', 'shield'];
+        const randomType = Phaser.Utils.Array.GetRandom(weaponTypes);
+
+        // Get valid spawn locations (ground + platforms)
+        const spawnLocations = this.getValidSpawnLocations();
+        const randomLocation = Phaser.Utils.Array.GetRandom(spawnLocations);
+
+        this.createWeapon(randomType, randomLocation.x, randomLocation.y);
+    }
+
+    getValidSpawnLocations() {
+        const locations = [];
+
+        // Ground level spawn points - respect actual ground bounds
+        if (this.actualGroundLeft !== undefined && this.actualGroundRight !== undefined) {
+            // Ground arena - only spawn on actual ground platform
+            for (let x = this.actualGroundLeft + 50; x < this.actualGroundRight - 50; x += 80) {
+                locations.push({ x: x, y: this.groundY });
+            }
+        } else if (this.platforms && this.platforms.length === 4) {
+            // Lava arena - don't spawn on ground (lava), only on platforms
+            // Ground spawning skipped for lava arena
+        } else {
+            // Default and spike arenas - normal ground spawning
+            for (let x = this.arenaLeft + 100; x < this.arenaRight - 100; x += 100) {
+                locations.push({ x: x, y: this.groundY });
+            }
+        }
+
+        // Platform spawn points
+        if (this.platforms) {
+            this.platforms.forEach(platform => {
+                // Add spawn points across each platform
+                const platformCenterX = platform.x + platform.width / 2;
+                const platformY = platform.y;
+                locations.push({ x: platformCenterX, y: platformY });
+
+                // Add additional points on wider platforms
+                if (platform.width > 150) {
+                    locations.push({
+                        x: platform.x + platform.width * 0.25,
+                        y: platformY
+                    });
+                    locations.push({
+                        x: platform.x + platform.width * 0.75,
+                        y: platformY
+                    });
+                }
+            });
+        }
+
+        return locations;
+    }
+
+    createWeapon(type, x, y) {
+        const weapon = {
+            type: type,
+            x: x,
+            y: y,
+            lifespan: 5000, // 5 seconds lifespan
+            sprite: null
+        };
+
+        // Create weapon sprites based on type
+        switch (type) {
+            case 'sword':
+                weapon.sprite = this.add.graphics();
+                weapon.sprite.lineStyle(4, 0xc0c0c0); // Blade
+                weapon.sprite.lineBetween(0, -15, 0, -35); // Medium blade
+                weapon.sprite.lineStyle(6, 0x8b4513); // Hilt
+                weapon.sprite.lineBetween(0, -12, 0, -8); // Hilt
+                weapon.sprite.fillStyle(0xffd700);
+                weapon.sprite.fillCircle(0, -8, 3); // Pommel
+                // Crossguard
+                weapon.sprite.lineStyle(5, 0x8b4513);
+                weapon.sprite.lineBetween(-8, -12, 8, -12);
+                break;
+            case 'gun':
+                weapon.sprite = this.add.graphics();
+                // Main gun body (pistol shape)
+                weapon.sprite.fillStyle(0x4a4a4a);
+                weapon.sprite.fillRect(-12, -4, 20, 8); // Main body
+                weapon.sprite.lineStyle(2, 0x2a2a2a);
+                weapon.sprite.strokeRect(-12, -4, 20, 8);
+
+                // Barrel
+                weapon.sprite.fillStyle(0x2a2a2a);
+                weapon.sprite.fillRect(8, -2, 8, 4);
+                weapon.sprite.lineStyle(1, 0x1a1a1a);
+                weapon.sprite.strokeRect(8, -2, 8, 4);
+
+                // Grip
+                weapon.sprite.fillStyle(0x654321);
+                weapon.sprite.fillRect(-12, 0, 6, 10);
+                weapon.sprite.lineStyle(1, 0x4a3218);
+                weapon.sprite.strokeRect(-12, 0, 6, 10);
+
+                // Trigger guard
+                weapon.sprite.lineStyle(2, 0x2a2a2a);
+                weapon.sprite.strokeEllipse(-6, 6, 6, 6);
+
+                // Sight
+                weapon.sprite.fillStyle(0x1a1a1a);
+                weapon.sprite.fillRect(12, -6, 2, 4);
+                break;
+            case 'potion':
+                weapon.sprite = this.add.text(x, y, '❤️', {
+                    fontSize: '32px'
+                }).setOrigin(0.5);
+                break;
+            case 'shield':
+                weapon.sprite = this.add.graphics();
+                // Shield main body (medieval kite shield)
+                weapon.sprite.fillStyle(0x4169E1); // Royal blue
+                weapon.sprite.fillEllipse(0, -5, 24, 32); // Main shield body
+                weapon.sprite.lineStyle(3, 0x1E90FF);
+                weapon.sprite.strokeEllipse(0, -5, 24, 32);
+
+                // Shield boss (center metal piece)
+                weapon.sprite.fillStyle(0xC0C0C0); // Silver
+                weapon.sprite.fillCircle(0, -8, 6);
+                weapon.sprite.lineStyle(2, 0x808080);
+                weapon.sprite.strokeCircle(0, -8, 6);
+
+                // Shield rim reinforcement
+                weapon.sprite.lineStyle(2, 0xFFD700); // Gold trim
+                weapon.sprite.strokeEllipse(0, -5, 20, 28);
+                break;
+        }
+
+        // Position weapon above the target location for drop
+        if (type !== 'potion') {
+            weapon.sprite.setPosition(x, y - 100);
+        } else {
+            weapon.sprite.setPosition(x, y - 100);
+        }
+
+        // Improved drop animation with rotation and scale
+        this.tweens.add({
+            targets: weapon.sprite,
+            y: y - 10, // Land slightly above ground
+            rotation: type !== 'potion' ? Math.PI * 2 : 0, // No rotation for heart emoji
+            scaleX: { from: 0.3, to: 1.3 },
+            scaleY: { from: 0.3, to: 1.3 },
+            duration: 600,
+            ease: 'Bounce.easeOut',
+            onComplete: () => {
+                // Settle scale back to normal
+                this.tweens.add({
+                    targets: weapon.sprite,
+                    scaleX: 1,
+                    scaleY: 1,
+                    duration: 200,
+                    ease: 'Back.easeOut'
+                });
+            }
+        });
+
+        this.weapons.push(weapon);
+    }
+
+    checkWeaponPickups() {
+        this.weapons.forEach((weapon, index) => {
+            // Check collision with player 1
+            const dist1 = Phaser.Math.Distance.Between(
+                this.player1.x, this.player1.y,
+                weapon.sprite.x, weapon.sprite.y
+            );
+
+            if (dist1 < 30) {
+                this.pickupWeapon(this.player1, weapon, index);
+                return;
+            }
+
+            // Check collision with player 2
+            const dist2 = Phaser.Math.Distance.Between(
+                this.player2.x, this.player2.y,
+                weapon.sprite.x, weapon.sprite.y
+            );
+
+            if (dist2 < 30) {
+                this.pickupWeapon(this.player2, weapon, index);
+                return;
+            }
+        });
+    }
+
+    pickupWeapon(player, weapon, weaponIndex) {
+        // Handle potion differently - immediate use
+        if (weapon.type === 'potion') {
+            this.usePotion(player);
+
+            // Remove weapon from field
+            weapon.sprite.destroy();
+            this.weapons.splice(weaponIndex, 1);
+            return;
+        }
+
+        // Remove old weapon if player has one
+        if (player.weapon) {
+            if (player.weapon.sprite) {
+                player.weapon.sprite.destroy();
+            }
+        }
+
+        // Assign new weapon
+        player.weapon = {
+            type: weapon.type,
+            sprite: null
+        };
+
+        // Create weapon visual attached to player
+        if (weapon.type === 'sword') {
+            player.weapon.sprite = this.add.graphics();
+            player.weapon.sprite.lineStyle(3, 0xc0c0c0);
+            player.weapon.sprite.lineBetween(15, -10, 15, -25);
+            player.weapon.sprite.lineStyle(5, 0x8b4513);
+            player.weapon.sprite.lineBetween(15, -8, 15, -5);
+            player.weapon.sprite.fillStyle(0xffd700);
+            player.weapon.sprite.fillCircle(15, -5, 2);
+            player.add(player.weapon.sprite);
+        } else if (weapon.type === 'gun') {
+            player.weapon.sprite = this.add.graphics();
+            // Main gun body (pistol shape) - positioned for player
+            player.weapon.sprite.fillStyle(0x4a4a4a);
+            player.weapon.sprite.fillRect(8, -3, 16, 6); // Smaller for held weapon
+            player.weapon.sprite.lineStyle(1, 0x2a2a2a);
+            player.weapon.sprite.strokeRect(8, -3, 16, 6);
+
+            // Barrel
+            player.weapon.sprite.fillStyle(0x2a2a2a);
+            player.weapon.sprite.fillRect(20, -2, 6, 4);
+
+            // Grip
+            player.weapon.sprite.fillStyle(0x654321);
+            player.weapon.sprite.fillRect(8, 0, 4, 8);
+
+            player.add(player.weapon.sprite);
+        } else if (weapon.type === 'shield') {
+            player.weapon.sprite = this.add.graphics();
+
+            // Shield positioned same as guns/weapons (right side for both players)
+            player.weapon.sprite.fillStyle(0x4169E1); // Royal blue
+            player.weapon.sprite.fillEllipse(15, -2, 16, 20); // Same X as sword/gun
+            player.weapon.sprite.lineStyle(2, 0x1E90FF);
+            player.weapon.sprite.strokeEllipse(15, -2, 16, 20);
+
+            // Shield boss (center metal piece)
+            player.weapon.sprite.fillStyle(0xC0C0C0); // Silver
+            player.weapon.sprite.fillCircle(15, -4, 3);
+            player.weapon.sprite.lineStyle(1, 0x808080);
+            player.weapon.sprite.strokeCircle(15, -4, 3);
+
+            // Shield rim reinforcement
+            player.weapon.sprite.lineStyle(1, 0xFFD700); // Gold trim
+            player.weapon.sprite.strokeEllipse(15, -2, 14, 18);
+
+            player.add(player.weapon.sprite);
+        }
+
+        // Remove weapon from field
+        weapon.sprite.destroy();
+        this.weapons.splice(weaponIndex, 1);
+
+        // Play pickup sound
+        if (window.audioManager) {
+            window.audioManager.playSound('buttonClick');
+        }
+    }
+
+    usePotion(player) {
+        // Heal the player
+        const healAmount = 20;
+        const maxHealth = player.stats.health;
+        player.health = Math.min(player.health + healAmount, maxHealth);
+
+        // Update health bar
+        this.updateHealthBars();
+
+        // Show heal effect
+        const healText = this.add.text(player.x, player.y - 40, `+${healAmount}`, {
+            fontSize: '24px',
+            fill: '#00ff00',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
+        // Animate heal number
+        this.tweens.add({
+            targets: healText,
+            y: healText.y - 60,
+            scaleX: 1.5,
+            scaleY: 1.5,
+            alpha: 0,
+            duration: 800,
+            ease: 'Power2',
+            onComplete: () => healText.destroy()
+        });
+
+        // Play heal sound
+        if (window.audioManager) {
+            window.audioManager.playSound('buttonClick');
+        }
+    }
+
+    fireBullet(player) {
+        const bulletSpeed = 600;
+        const direction = player.body.facingRight ? 1 : -1;
+
+        // Calculate bullet start position (from gun barrel)
+        const startX = player.x + (direction * 25);
+        const startY = player.y - 5;
+
+        const bullet = {
+            sprite: this.add.circle(startX, startY, 3, 0x404040), // Dark grey bullet for better visibility
+            velocityX: direction * bulletSpeed,
+            velocityY: 0,
+            shooter: player,
+            lifespan: 2000 // 2 seconds max
+        };
+
+        this.bullets.push(bullet);
+
+        // Play gun shot sound
+        if (window.audioManager) {
+            window.audioManager.playSound('buttonClick'); // Gun shot sound (sharp click for gunshot)
+        }
+
+        // Muzzle flash effect
+        const muzzleFlash = this.add.circle(startX, startY, 8, 0xffffff, 0.8);
+        this.tweens.add({
+            targets: muzzleFlash,
+            alpha: 0,
+            scaleX: 2,
+            scaleY: 2,
+            duration: 100,
+            onComplete: () => muzzleFlash.destroy()
+        });
+    }
+
+    updateBullets(delta) {
+        this.bullets = this.bullets.filter(bullet => {
+            // Update position
+            bullet.sprite.x += bullet.velocityX * (delta / 1000);
+            bullet.sprite.y += bullet.velocityY * (delta / 1000);
+
+            // Decrease lifespan
+            bullet.lifespan -= delta;
+
+            // Check if bullet is out of bounds or expired
+            if (bullet.sprite.x < this.arenaLeft ||
+                bullet.sprite.x > this.arenaRight ||
+                bullet.lifespan <= 0) {
+                bullet.sprite.destroy();
+                return false;
+            }
+
+            // Check collision with platforms
+            if (this.platforms) {
+                for (const platform of this.platforms) {
+                    if (bullet.sprite.x >= platform.x &&
+                        bullet.sprite.x <= platform.x + platform.width &&
+                        bullet.sprite.y >= platform.y &&
+                        bullet.sprite.y <= platform.y + platform.height) {
+
+                        // Bullet hit platform
+                        this.createBulletImpact(bullet.sprite.x, bullet.sprite.y);
+                        bullet.sprite.destroy();
+                        return false;
+                    }
+                }
+            }
+
+            // Check collision with players
+            const target = bullet.shooter === this.player1 ? this.player2 : this.player1;
+            const distance = Phaser.Math.Distance.Between(
+                bullet.sprite.x, bullet.sprite.y,
+                target.x, target.y
+            );
+
+            if (distance < 25) { // Hit detection radius
+                // Deal damage
+                const damage = this.calculateDamage(bullet.shooter);
+                this.dealDamage(target, damage, 'gun', bullet.shooter);
+
+                // Create bullet impact effect
+                this.createBulletImpact(bullet.sprite.x, bullet.sprite.y);
+
+                // Remove bullet
+                bullet.sprite.destroy();
+                return false;
+            }
+
+            return true;
+        });
+    }
+
+    createBulletImpact(x, y) {
+        // Create impact spark effect
+        for (let i = 0; i < 6; i++) {
+            const spark = this.add.circle(
+                x + Phaser.Math.Between(-5, 5),
+                y + Phaser.Math.Between(-5, 5),
+                2,
+                0xffa500,
+                0.8
+            );
+
+            this.tweens.add({
+                targets: spark,
+                x: spark.x + Phaser.Math.Between(-20, 20),
+                y: spark.y + Phaser.Math.Between(-20, 20),
+                alpha: 0,
+                duration: 300,
+                onComplete: () => spark.destroy()
+            });
+        }
+
+        // Impact flash
+        const impactFlash = this.add.circle(x, y, 15, 0xffffff, 0.6);
+        this.tweens.add({
+            targets: impactFlash,
+            alpha: 0,
+            scaleX: 2,
+            scaleY: 2,
+            duration: 150,
+            onComplete: () => impactFlash.destroy()
+        });
+    }
+
     preload() {
         // Load the background image from root
         // Removed background image loading
@@ -1629,5 +2459,459 @@ class BattleScene extends Phaser.Scene {
             { x: rightPlatformX, y: upperPlatformY, width: platformWidth, height: 25 },
             { x: middlePlatformX, y: middlePlatformY, width: middlePlatformWidth, height: 25 }
         ];
+
+        // No hazards in default arena, but add invisible boundary walls to prevent falling off
+        this.hazards = [];
+
+        // Add invisible boundary walls (not hazards, just collision boundaries)
+        this.arenaWalls = [
+            { x: this.arenaLeft - 50, y: 0, width: 50, height: this.cameras.main.height }, // Left wall
+            { x: this.arenaRight, y: 0, width: 50, height: this.cameras.main.height } // Right wall
+        ];
+    }
+
+    createEmptyArena() {
+        // Set arena bounds immediately (CRITICAL - must happen before character creation)
+        this.arenaLeft = this.cameras.main.width * 0.1; // 10% from left
+        this.arenaRight = this.cameras.main.width * 0.9; // 10% from right
+        this.groundY = this.cameras.main.height; // No ground - players fall into void
+
+        // Create simple background
+        this.add.rectangle(this.cameras.main.centerX, this.cameras.main.centerY,
+            this.cameras.main.width, this.cameras.main.height, 0x87CEEB).setDepth(-100);
+
+        // Add some clouds for atmosphere
+        for (let i = 0; i < 8; i++) {
+            const x = Phaser.Math.Between(0, this.cameras.main.width);
+            const y = Phaser.Math.Between(50, 300);
+            const cloud = this.add.ellipse(x, y, 80, 40, 0xffffff, 0.8);
+            cloud.setDepth(-50);
+        }
+
+        // No platforms - completely empty
+        this.platforms = [];
+
+        // No hazards in empty arena
+        this.hazards = [];
+    }
+
+    createGroundOnlyArena() {
+        // Set arena bounds immediately (CRITICAL - must happen before character creation)
+        this.arenaLeft = this.cameras.main.width * 0.1; // 10% from left
+        this.arenaRight = this.cameras.main.width * 0.9; // 10% from right
+        this.groundY = this.cameras.main.height * 0.75; // 75% down the screen
+
+        // Create simple background
+        this.add.rectangle(this.cameras.main.centerX, this.cameras.main.centerY,
+            this.cameras.main.width, this.cameras.main.height, 0x87CEEB).setDepth(-100);
+
+        // Create smaller ground - only 70% of mid part
+        const totalArenaWidth = this.arenaRight - this.arenaLeft;
+        const actualGroundWidth = totalArenaWidth * 0.7; // 70% of the arena width
+        const groundStartX = this.arenaLeft + (totalArenaWidth - actualGroundWidth) / 2; // Center the ground
+
+        const ground = this.add.rectangle(
+            groundStartX + actualGroundWidth / 2,
+            this.groundY + 25,
+            actualGroundWidth,
+            50,
+            0x8B4513
+        );
+        ground.setDepth(-20);
+
+        // Add ground texture only on the actual ground
+        const groundTexture = this.add.graphics();
+        groundTexture.lineStyle(2, 0x654321);
+        for (let i = 0; i < 7; i++) { // Reduced lines for smaller ground
+            const x = groundStartX + (i * actualGroundWidth / 7);
+            groundTexture.moveTo(x, this.groundY);
+            groundTexture.lineTo(x, this.groundY + 50);
+        }
+        groundTexture.setDepth(-19);
+
+        // Update arena bounds to match the actual ground for proper collision detection
+        this.actualGroundLeft = groundStartX;
+        this.actualGroundRight = groundStartX + actualGroundWidth;
+
+        // No platforms - just ground
+        this.platforms = [];
+
+        // No side walls - players can fall off edges
+        // Create void hazard areas with delay like lava arena (players need to fall some distance before elimination)
+        const fallDelayDistance = this.cameras.main.height * 0.15; // 15% of screen height fall delay
+        const voidStartY = this.groundY + fallDelayDistance; // Start void hazards below ground level with delay
+
+        this.hazards = [
+            // Left void area - starts below ground level to allow falling time
+            { type: 'void', x: 0, y: voidStartY, width: this.actualGroundLeft, height: this.cameras.main.height },
+            // Right void area - starts below ground level to allow falling time
+            { type: 'void', x: this.actualGroundRight, y: voidStartY, width: this.cameras.main.width - this.actualGroundRight, height: this.cameras.main.height },
+            // Bottom void area (entire width, well below ground level)
+            { type: 'void', x: 0, y: this.cameras.main.height + 100, width: this.cameras.main.width, height: 200 }
+        ];
+
+        // No arena walls in ground arena
+        this.arenaWalls = [];
+
+        // Keep death boundary as backup
+        this.deathBoundary = this.cameras.main.height + 100;
+    }
+
+    createSpikeArena() {
+        // Set arena bounds immediately (CRITICAL - must happen before character creation)
+        this.arenaLeft = this.cameras.main.width * 0.1; // 10% from left
+        this.arenaRight = this.cameras.main.width * 0.9; // 10% from right
+        this.groundY = this.cameras.main.height * 0.75; // 75% down the screen
+
+        // Create jail dungeon background
+        const bg = this.add.rectangle(this.cameras.main.centerX, this.cameras.main.centerY,
+            this.cameras.main.width, this.cameras.main.height, 0x0D0D0D).setDepth(-100);
+
+        // Add stone brick wall texture
+        const bricks = this.add.graphics();
+        bricks.setDepth(-95);
+        for (let y = 0; y < this.cameras.main.height; y += 40) {
+            for (let x = 0; x < this.cameras.main.width; x += 60) {
+                bricks.lineStyle(1, 0x333333, 0.5);
+                bricks.strokeRect(x, y, 60, 40);
+            }
+        }
+
+        // Create jail floor
+        const groundWidth = this.arenaRight - this.arenaLeft;
+        const ground = this.add.rectangle(
+            this.arenaLeft + groundWidth / 2,
+            this.groundY + 25,
+            groundWidth,
+            50,
+            0x2A2A2A
+        );
+        ground.setDepth(-20);
+
+        // Add floor stone pattern
+        const floorPattern = this.add.graphics();
+        floorPattern.lineStyle(2, 0x1A1A1A);
+        for (let x = this.arenaLeft; x < this.arenaRight; x += 30) {
+            floorPattern.moveTo(x, this.groundY);
+            floorPattern.lineTo(x, this.groundY + 50);
+        }
+        floorPattern.setDepth(-19);
+
+        // Create spike hazards
+        this.hazards = [];
+
+        // Calculate ceiling spike level
+        const topSpikeY = this.groundY - 200; // Only 200 pixels above ground (players jump ~400)
+
+        // Left wall jail spikes - only extend to top spikes
+        const leftSpikeHeight = this.groundY - topSpikeY; // Height from ground to ceiling spikes
+        const leftSpikes = this.add.graphics();
+        leftSpikes.fillStyle(0x4A4A4A); // Steel grey for jail bars
+        for (let y = topSpikeY; y < this.groundY; y += 35) {
+            leftSpikes.fillTriangle(
+                this.arenaLeft, y,
+                this.arenaLeft + 25, y + 17,
+                this.arenaLeft, y + 35
+            );
+        }
+        leftSpikes.setDepth(-10);
+
+        // Right wall jail spikes - only extend to top spikes
+        const rightSpikes = this.add.graphics();
+        rightSpikes.fillStyle(0x4A4A4A); // Steel grey for jail bars
+        for (let y = topSpikeY; y < this.groundY; y += 35) {
+            rightSpikes.fillTriangle(
+                this.arenaRight, y,
+                this.arenaRight - 25, y + 17,
+                this.arenaRight, y + 35
+            );
+        }
+        rightSpikes.setDepth(-10);
+
+        // Top ceiling spikes - menacing jail ceiling
+        const topSpikes = this.add.graphics();
+        topSpikes.fillStyle(0x4A4A4A); // Steel grey
+        for (let x = this.arenaLeft; x < this.arenaRight; x += 45) {
+            topSpikes.fillTriangle(
+                x, topSpikeY,
+                x + 22, topSpikeY + 35,
+                x + 45, topSpikeY
+            );
+        }
+        topSpikes.setDepth(-10);
+
+        // Add jail bars for authenticity
+        const jailBars = this.add.graphics();
+        jailBars.lineStyle(4, 0x333333);
+
+        // Left jail bars
+        for (let y = topSpikeY + 40; y < this.groundY; y += 25) {
+            jailBars.moveTo(this.arenaLeft + 5, y);
+            jailBars.lineTo(this.arenaLeft + 15, y);
+        }
+
+        // Right jail bars
+        for (let y = topSpikeY + 40; y < this.groundY; y += 25) {
+            jailBars.moveTo(this.arenaRight - 15, y);
+            jailBars.lineTo(this.arenaRight - 5, y);
+        }
+        jailBars.setDepth(-9);
+
+        // Add horror skull above top spikes
+        const skullY = topSpikeY - 60;
+        const skullX = this.cameras.main.centerX;
+
+        // Skull base
+        const skull = this.add.graphics();
+        skull.fillStyle(0xE8E8E8); // Bone white
+        skull.fillCircle(skullX, skullY, 25); // Head
+        skull.fillRect(skullX - 15, skullY + 10, 30, 20); // Jaw area
+
+        // Eye sockets
+        skull.fillStyle(0x000000);
+        skull.fillCircle(skullX - 8, skullY - 5, 6); // Left eye
+        skull.fillCircle(skullX + 8, skullY - 5, 6); // Right eye
+
+        // Nasal cavity
+        skull.fillTriangle(skullX, skullY + 2, skullX - 4, skullY + 12, skullX + 4, skullY + 12);
+
+        // Teeth
+        skull.fillStyle(0xE8E8E8);
+        for (let i = -2; i <= 2; i++) {
+            skull.fillRect(skullX + (i * 4) - 1, skullY + 18, 2, 8);
+        }
+        skull.setDepth(-5);
+
+        // Store hazard areas for collision detection
+        this.hazards = [
+            { type: 'spikes', x: this.arenaLeft, y: topSpikeY, width: 25, height: leftSpikeHeight }, // Left wall
+            { type: 'spikes', x: this.arenaRight - 25, y: topSpikeY, width: 25, height: leftSpikeHeight }, // Right wall
+            { type: 'spikes', x: this.arenaLeft, y: topSpikeY, width: this.arenaRight - this.arenaLeft, height: 35 } // Top ceiling
+        ];
+
+        // No platforms
+        this.platforms = [];
+
+        // No arena walls in spike arena
+        this.arenaWalls = [];
+    }
+
+    createLavaArena() {
+        // Set arena bounds immediately (CRITICAL - must happen before character creation)
+        this.arenaLeft = this.cameras.main.width * 0.1; // 10% from left
+        this.arenaRight = this.cameras.main.width * 0.9; // 10% from right
+        this.groundY = this.cameras.main.height; // No ground - lava below
+
+        // Create dramatic hellish background with gradient
+        const bg = this.add.rectangle(this.cameras.main.centerX, this.cameras.main.centerY,
+            this.cameras.main.width, this.cameras.main.height, 0x1A0000).setDepth(-100);
+
+        // Add fiery glow layers
+        const glow1 = this.add.rectangle(this.cameras.main.centerX, this.cameras.main.height * 0.8,
+            this.cameras.main.width, this.cameras.main.height * 0.4, 0x4D1A00).setDepth(-90).setAlpha(0.6);
+        const glow2 = this.add.rectangle(this.cameras.main.centerX, this.cameras.main.height * 0.9,
+            this.cameras.main.width, this.cameras.main.height * 0.2, 0x660000).setDepth(-90).setAlpha(0.4);
+
+        // Add hellish smoke/ash particles
+        const smoke = this.add.graphics();
+        smoke.setDepth(-85);
+        for (let i = 0; i < 15; i++) {
+            const x = Phaser.Math.Between(0, this.cameras.main.width);
+            const y = Phaser.Math.Between(0, this.cameras.main.height * 0.7);
+            smoke.fillStyle(0x330000, 0.3);
+            smoke.fillCircle(x, y, Phaser.Math.Between(10, 30));
+        }
+
+        // Create animated lava pit at bottom
+        const lavaHeight = this.cameras.main.height * 0.3;
+
+        // Base lava layer
+        const lava1 = this.add.rectangle(
+            this.cameras.main.centerX,
+            this.cameras.main.height - lavaHeight / 2,
+            this.cameras.main.width,
+            lavaHeight,
+            0xCC1100
+        );
+        lava1.setDepth(-20);
+
+        // Subtle animated fire flames rising from lava
+        this.lavaFlames = [];
+        for (let i = 0; i < 10; i++) { // Reduced from 20 to 10 flames
+            const x = Phaser.Math.Between(50, this.cameras.main.width - 50);
+            const baseY = this.cameras.main.height - lavaHeight;
+
+            // Create flame sprites as graphics for animation
+            const flame = this.add.graphics();
+            flame.x = x;
+            flame.y = baseY;
+            flame.setDepth(-15);
+
+            // Draw smaller flame shape
+            this.drawFlame(flame, 0, 0, 8, 20); // Reduced size from 15,30 to 8,20
+
+            // Animate flame with subtle flickering effect
+            this.tweens.add({
+                targets: flame,
+                y: baseY - Phaser.Math.Between(20, 40), // Reduced height from 40-80 to 20-40
+                scaleX: { from: 1, to: 0.7 }, // Less dramatic scaling
+                scaleY: { from: 1, to: 1.2 }, // Less dramatic scaling
+                alpha: { from: 0.8, to: 0.1 }, // Start with lower alpha
+                duration: Phaser.Math.Between(1200, 2000), // Slower animation
+                ease: 'Sine.easeInOut', // Smoother easing
+                repeat: -1,
+                yoyo: false,
+                delay: Phaser.Math.Between(0, 1500),
+                onRepeat: () => {
+                    flame.y = baseY;
+                    flame.scaleX = 1;
+                    flame.scaleY = 1;
+                    flame.alpha = 0.8;
+                    this.drawFlame(flame, 0, 0, Phaser.Math.Between(6, 10), Phaser.Math.Between(15, 25));
+                }
+            });
+
+            this.lavaFlames.push(flame);
+        }
+
+        // Add bubbling lava effects
+        const bubbles = this.add.graphics();
+        bubbles.setDepth(-16);
+        for (let i = 0; i < 15; i++) {
+            const x = Phaser.Math.Between(0, this.cameras.main.width);
+            const y = Phaser.Math.Between(this.cameras.main.height - lavaHeight, this.cameras.main.height);
+            bubbles.fillStyle(0xFF6600, 0.8);
+            bubbles.fillCircle(x, y, Phaser.Math.Between(5, 15));
+        }
+
+        // Initialize platforms array
+        this.platforms = [];
+
+        // Create 4 floating platforms with HUGE gaps BETWEEN them (not on sides)
+        const arenaWidth = this.arenaRight - this.arenaLeft;
+        const platformWidth = arenaWidth * 0.1; // Smaller platforms (10% width each)
+        const platformY = this.cameras.main.height * 0.5; // Middle height
+
+        // Calculate positions: platforms span most of arena width with huge gaps between
+        const totalPlatformWidth = platformWidth * 4; // Total width of all platforms
+        const totalGapWidth = arenaWidth * 0.85 - totalPlatformWidth; // More width for gaps between platforms
+        const gapBetweenPlatforms = totalGapWidth / 3; // 3 huge gaps between 4 platforms
+
+        const startX = this.arenaLeft + arenaWidth * 0.075; // Start closer to edge (smaller side margins)
+
+        for (let i = 0; i < 4; i++) {
+            // Calculate X position: platform + gaps between previous platforms
+            const platformX = startX + (i * (platformWidth + gapBetweenPlatforms));
+
+            // Create menacing stone platform (shorter vertically)
+            const platformHeight = 20; // Reduced from 25 to 20
+            const platform = this.add.rectangle(
+                platformX + platformWidth / 2,
+                platformY,
+                platformWidth,
+                platformHeight,
+                0x2C1810
+            );
+            platform.setDepth(-10);
+
+            // Add platform outline with hellish glow
+            const outline = this.add.graphics();
+            outline.lineStyle(3, 0x660000);
+            outline.strokeRect(platformX, platformY - platformHeight/2, platformWidth, platformHeight);
+            outline.setDepth(-9);
+
+            // Add platform cracks and damage
+            const cracks = this.add.graphics();
+            cracks.lineStyle(1, 0x000000, 0.8);
+            for (let j = 0; j < 3; j++) {
+                const crackX = platformX + Math.random() * platformWidth;
+                cracks.moveTo(crackX, platformY - platformHeight/2);
+                cracks.lineTo(crackX + Math.random() * 20 - 10, platformY + platformHeight/2);
+            }
+            cracks.setDepth(-8);
+
+            // Add hellish underglow
+            const glow = this.add.rectangle(
+                platformX + platformWidth / 2,
+                platformY + 15,
+                platformWidth + 10,
+                12,
+                0xFF3300
+            );
+            glow.setDepth(-11).setAlpha(0.3);
+
+            // Store platform for collision
+            this.platforms.push({
+                x: platformX,
+                y: platformY - platformHeight/2,
+                width: platformWidth,
+                height: platformHeight
+            });
+        }
+
+        // Store lava hazard for collision detection
+        this.hazards = [
+            { type: 'lava', x: 0, y: this.cameras.main.height - lavaHeight, width: this.cameras.main.width, height: lavaHeight }
+        ];
+
+        // No arena walls in lava arena
+        this.arenaWalls = [];
+    }
+
+    checkArenaWallCollisions(player) {
+        if (!this.arenaWalls || this.arenaWalls.length === 0) return;
+
+        const playerLeft = player.body.x;
+        const playerRight = player.body.x + player.body.width;
+        const playerTop = player.body.y;
+        const playerBottom = player.body.y + player.body.height;
+
+        for (const wall of this.arenaWalls) {
+            const wallLeft = wall.x;
+            const wallRight = wall.x + wall.width;
+            const wallTop = wall.y;
+            const wallBottom = wall.y + wall.height;
+
+            // Check if player overlaps with wall
+            if (playerRight > wallLeft &&
+                playerLeft < wallRight &&
+                playerBottom > wallTop &&
+                playerTop < wallBottom) {
+
+                // Push player back from wall (prevent falling off arena)
+                if (playerLeft < wallRight && wallLeft < this.arenaLeft) {
+                    // Left wall - push player right
+                    player.body.x = wallRight;
+                    player.body.velocityX = Math.max(0, player.body.velocityX); // Stop leftward movement
+                } else if (playerRight > wallLeft && wallLeft >= this.arenaRight) {
+                    // Right wall - push player left
+                    player.body.x = wallLeft - player.body.width;
+                    player.body.velocityX = Math.min(0, player.body.velocityX); // Stop rightward movement
+                }
+            }
+        }
+    }
+
+    drawFlame(graphics, x, y, width, height) {
+        graphics.clear();
+
+        // Create flame shape with multiple colors
+        const flameColors = [0xFF0000, 0xFF4500, 0xFF6600, 0xFFFF00];
+
+        for (let i = 0; i < 4; i++) {
+            const layerHeight = height * (1 - i * 0.2);
+            const layerWidth = width * (1 - i * 0.15);
+
+            graphics.fillStyle(flameColors[i], 0.8 - i * 0.1);
+
+            // Draw flame shape (teardrop/flame shape)
+            graphics.beginPath();
+            graphics.fillCircle(x, y, layerWidth / 2);
+            graphics.fillTriangle(
+                x - layerWidth / 3, y,
+                x + layerWidth / 3, y,
+                x, y - layerHeight
+            );
+        }
     }
 }
