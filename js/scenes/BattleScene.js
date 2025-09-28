@@ -2665,7 +2665,7 @@ class BattleScene extends Phaser.Scene {
         // Top ceiling spikes - only over the platform area
         const topSpikes = this.add.graphics();
         topSpikes.fillStyle(0x4A4A4A); // Steel grey
-        for (let x = platformStartX - 25; x < platformStartX + platformWidth + 25; x += 45) {
+        for (let x = platformStartX - 25; x < platformStartX + platformWidth; x += 45) {
             topSpikes.fillTriangle(
                 x, topSpikeY,
                 x + 22, topSpikeY + 35,
