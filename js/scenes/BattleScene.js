@@ -282,6 +282,22 @@ class BattleScene extends Phaser.Scene {
         this.player1.weapon = null; // No weapon by default
         this.player1.knockbackTime = 0; // For knockback effects
 
+        // Passive ability system
+        this.player1.abilityTriggered = false; // Track if ability has activated
+        this.player1.abilityActive = false; // Track if ability is currently active
+        this.player1.abilityEffect = null; // Store visual effect reference
+        this.player1.healingTimer = 0; // For Second Wind healing over time
+
+        // Sacrifice attack system
+        this.player1.sacrificeUsed = false; // Track if sacrifice attack has been used
+        this.player1.sacrificeAttacking = false; // Track if currently performing sacrifice attack
+
+        // Blood Gambit system
+        this.player1.gambitUsed = false; // Track if blood gambit has been used
+        this.player1.buffActive = false; // Track if buff is currently active
+        this.player1.buffType = null; // Type of buff active
+        this.player1.buffTimer = 0; // Time remaining on buff
+
         // Attack hitbox (invisible)
         this.player1.attackHitbox = this.add.rectangle(0, 0, 60, 40, 0xff0000, 0);
     }
@@ -340,6 +356,22 @@ class BattleScene extends Phaser.Scene {
         this.player2.weapon = null; // No weapon by default
         this.player2.knockbackTime = 0; // For knockback effects
 
+        // Passive ability system
+        this.player2.abilityTriggered = false; // Track if ability has activated
+        this.player2.abilityActive = false; // Track if ability is currently active
+        this.player2.abilityEffect = null; // Store visual effect reference
+        this.player2.healingTimer = 0; // For Second Wind healing over time
+
+        // Sacrifice attack system
+        this.player2.sacrificeUsed = false; // Track if sacrifice attack has been used
+        this.player2.sacrificeAttacking = false; // Track if currently performing sacrifice attack
+
+        // Blood Gambit system
+        this.player2.gambitUsed = false; // Track if blood gambit has been used
+        this.player2.buffActive = false; // Track if buff is currently active
+        this.player2.buffType = null; // Type of buff active
+        this.player2.buffTimer = 0; // Time remaining on buff
+
         // Attack hitbox (invisible)
         this.player2.attackHitbox = this.add.rectangle(0, 0, 60, 40, 0xff0000, 0);
     }
@@ -386,37 +418,46 @@ class BattleScene extends Phaser.Scene {
             fontStyle: 'bold'
         }).setOrigin(0.5);
 
-        // Controls display
-        this.add.text(this.cameras.main.centerX, this.cameras.main.height - 60,
-            'P1: WASD + SPACE (Attack) + Double-tap A/D (Dash)', {
-            fontSize: '14px',
-            fill: '#000000'
-        }).setOrigin(0.5);
+        // Clean controls panel - compact and readable at bottom
+        const controlsBg = this.add.rectangle(
+            this.cameras.main.centerX,
+            this.cameras.main.height - 22,
+            1260,
+            40,
+            0x000000,
+            0.75
+        );
 
-        this.add.text(this.cameras.main.centerX, this.cameras.main.height - 40,
-            'P2: ARROWS + SHIFT (Attack) + Double-tap ←/→ (Dash)', {
-            fontSize: '14px',
-            fill: '#000000'
+        // Single line with all essential controls
+        this.add.text(this.cameras.main.centerX, this.cameras.main.height - 22,
+            'P1: WASD+SPACE | E=Sacrifice Q=Gambit    P2: ARROWS+SHIFT | ENTER=Sacrifice CTRL=Gambit    [Dash: Double-tap A/D or ←/→]', {
+            fontSize: '12px',
+            fill: '#ffffff',
+            fontStyle: 'bold'
         }).setOrigin(0.5);
     }
 
     setupInput() {
-        // Player 1 controls (WASD + Spacebar)
+        // Player 1 controls (WASD + Spacebar + E for sacrifice + Q for blood gambit)
         this.keys1 = {
             up: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W),
             left: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A),
             down: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
             right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
-            attack: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
+            attack: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
+            sacrifice: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E),
+            gambit: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q)
         };
 
-        // Player 2 controls (Arrow keys + Shift)
+        // Player 2 controls (Arrow keys + Shift + Enter for sacrifice + Ctrl for blood gambit)
         this.keys2 = {
             up: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP),
             left: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT),
             down: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN),
             right: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.RIGHT),
-            attack: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT)
+            attack: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
+            sacrifice: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER),
+            gambit: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.CTRL)
         };
     }
 
@@ -456,16 +497,8 @@ class BattleScene extends Phaser.Scene {
                 this.timerText.setText(this.battleTimer.toString());
 
                 if (this.battleTimer <= 0) {
-                    // Calculate health percentages
-                    const player1HealthPercent = (this.player1.health / this.player1.stats.health) * 100;
-                    const player2HealthPercent = (this.player2.health / this.player2.stats.health) * 100;
-
-                    // Check if health percentages are the same (within 1% tolerance)
-                    if (Math.abs(player1HealthPercent - player2HealthPercent) <= 1) {
-                        this.startSuddenDeath();
-                    } else {
-                        this.endBattle('time');
-                    }
+                    // Time's up - always go to Overtime Sacrifice
+                    this.startSuddenDeath();
                 }
             },
             repeat: 29
@@ -572,6 +605,12 @@ class BattleScene extends Phaser.Scene {
         // Update bullets
         this.updateBullets(delta);
 
+        // Update passive abilities
+        this.updatePassiveAbilities(delta);
+
+        // Update blood gambit buff timers
+        this.updateBuffTimers(delta);
+
         // Handle player input and movement
         this.handlePlayer1Input(delta);
         this.handlePlayer2Input(delta);
@@ -597,7 +636,7 @@ class BattleScene extends Phaser.Scene {
     handlePlayer1Input(delta) {
         const player = this.player1;
         const keys = this.keys1;
-        const speed = player.stats.speed;
+        const speed = player.stats.speed + (player.buffSpeedBonus || 0);
 
         // Store intended movement
         let intendedVelocityX = 0;
@@ -695,12 +734,22 @@ class BattleScene extends Phaser.Scene {
             this.performAttack(player, 1);
             this.attackCooldown1 = 500; // 0.5 second cooldown
         }
+
+        // Sacrifice Attack (E key)
+        if (Phaser.Input.Keyboard.JustDown(keys.sacrifice) && !player.sacrificeUsed && player.health > 30) {
+            this.performSacrificeAttack(player, 1);
+        }
+
+        // Blood Gambit (Q key)
+        if (Phaser.Input.Keyboard.JustDown(keys.gambit) && !player.gambitUsed) {
+            this.performBloodGambit(player);
+        }
     }
 
     handlePlayer2Input(delta) {
         const player = this.player2;
         const keys = this.keys2;
-        const speed = player.stats.speed;
+        const speed = player.stats.speed + (player.buffSpeedBonus || 0);
 
         // Store intended movement
         let intendedVelocityX = 0;
@@ -798,6 +847,16 @@ class BattleScene extends Phaser.Scene {
             this.performAttack(player, 2);
             this.attackCooldown2 = 500; // 0.5 second cooldown
         }
+
+        // Sacrifice Attack (Enter key)
+        if (Phaser.Input.Keyboard.JustDown(keys.sacrifice) && !player.sacrificeUsed && player.health > 30) {
+            this.performSacrificeAttack(player, 2);
+        }
+
+        // Blood Gambit (Ctrl key)
+        if (Phaser.Input.Keyboard.JustDown(keys.gambit) && !player.gambitUsed) {
+            this.performBloodGambit(player);
+        }
     }
 
     updatePlayerPhysics(player, delta) {
@@ -806,6 +865,8 @@ class BattleScene extends Phaser.Scene {
         // Apply gravity
         if (!player.body.grounded) {
             player.body.velocityY += 800 * deltaSeconds; // Gravity
+            // Cap max fall speed to prevent going through ground
+            player.body.velocityY = Math.min(player.body.velocityY, 1500);
         }
 
         // Update position
@@ -913,11 +974,13 @@ class BattleScene extends Phaser.Scene {
         }
 
         // Safety check - prevent falling through ground in default and spike arenas only
-        if (player.body.y + player.body.height > this.groundY && (this.arenaType === 'default' || this.arenaType === 'spike_arena')) {
-            // Force player back to ground level if they somehow got below it (default and spike arenas only)
-            player.body.y = this.groundY - player.body.height;
-            player.body.velocityY = 0;
-            player.body.grounded = true;
+        if ((this.arenaType === 'default' || this.arenaType === 'spike_arena')) {
+            // Hard clamp: Never allow player to go below ground level
+            if (player.body.y + player.body.height > this.groundY) {
+                player.body.y = this.groundY - player.body.height;
+                player.body.velocityY = 0;
+                player.body.grounded = true;
+            }
         }
 
         // Update sprite position
@@ -1298,20 +1361,481 @@ class BattleScene extends Phaser.Scene {
         }
     }
 
+    performSacrificeAttack(player, playerNum) {
+        if (!player.parts) return;
+
+        // Mark player as using sacrifice
+        player.sacrificeUsed = true;
+        player.sacrificeHit = false; // Track if sacrifice hit the opponent
+
+        // Show sacrifice charge text
+        const costText = this.add.text(player.x, player.y - 100, 'SACRIFICE ATTACK!', {
+            fontSize: '20px',
+            fill: '#ff0000',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: costText,
+            y: costText.y - 40,
+            alpha: 0,
+            duration: 1500,
+            ease: 'Power2',
+            onComplete: () => costText.destroy()
+        });
+
+        // Check if player has a gun equipped
+        if (player.weapon && player.weapon.type === 'gun') {
+            // Gun-based sacrifice attack - fire a powerful sacrifice bullet
+            this.fireSacrificeBullet(player, playerNum);
+        } else {
+            // Melee-based sacrifice attack (original behavior)
+            player.sacrificeAttacking = true;
+
+            // Dramatic attack animation with blood-red effect
+            const attackDirection = player.body.facingRight ? 1 : -1;
+
+            // Blood-red charge effect
+            const chargeEffect = this.add.circle(player.x, player.y, 60, 0x8b0000, 0.6);
+            this.tweens.add({
+                targets: chargeEffect,
+                scaleX: 0.5,
+                scaleY: 0.5,
+                alpha: 0,
+                duration: 200,
+                onComplete: () => chargeEffect.destroy()
+            });
+
+            // Powerful arm swing
+            this.tweens.add({
+                targets: player.parts.rightArm,
+                rotation: -Math.PI / 2,
+                duration: 150,
+                ease: 'Power3',
+                yoyo: true
+            });
+
+            // Body lunge forward
+            this.tweens.add({
+                targets: player,
+                x: player.x + (attackDirection * 30),
+                duration: 150,
+                yoyo: true,
+                ease: 'Power3'
+            });
+
+            // Play powerful sound
+            if (window.audioManager) {
+                window.audioManager.playSound('criticalHit');
+            }
+
+            // Check if attack hit after animation completes
+            this.time.delayedCall(300, () => {
+                player.sacrificeAttacking = false;
+
+                // If attack missed, damage self for 30 HP
+                if (!player.sacrificeHit) {
+                    this.applySacrificeMissPenalty(player);
+                }
+            });
+        }
+    }
+
+    fireSacrificeBullet(player, playerNum) {
+        const bulletSpeed = 800; // Faster than normal bullets
+        const direction = player.body.facingRight ? 1 : -1;
+
+        // Calculate bullet start position (from gun barrel)
+        const startX = player.x + (direction * 25);
+        const startY = player.y - 5;
+
+        const sacrificeBullet = {
+            sprite: this.add.circle(startX, startY, 5, 0x8b0000, 1), // Larger, dark red bullet
+            velocityX: direction * bulletSpeed,
+            velocityY: 0,
+            shooter: player,
+            isSacrifice: true, // Mark as sacrifice bullet
+            lifespan: 3000, // 3 seconds max
+            hit: false
+        };
+
+        this.bullets.push(sacrificeBullet);
+
+        // Gun recoil animation
+        if (player.parts && player.parts.rightArm) {
+            this.tweens.add({
+                targets: player.parts.rightArm,
+                rotation: -Math.PI / 6,
+                duration: 80,
+                ease: 'Power2',
+                yoyo: true
+            });
+        }
+
+        // Play gun shot sound
+        if (window.audioManager) {
+            window.audioManager.playSound('gunShot');
+        }
+
+        // Large muzzle flash effect
+        const muzzleFlash = this.add.circle(startX, startY, 15, 0xff0000, 0.9);
+        this.tweens.add({
+            targets: muzzleFlash,
+            alpha: 0,
+            scaleX: 3,
+            scaleY: 3,
+            duration: 150,
+            onComplete: () => muzzleFlash.destroy()
+        });
+
+        // Track the bullet to check if it hits or goes out of bounds
+        player.sacrificeBullet = sacrificeBullet;
+    }
+
+    applySacrificeMissPenalty(player) {
+        player.health = Math.max(0, player.health - 30);
+        this.updateHealthBars();
+
+        // Show damage number
+        const damageText = this.add.text(player.x, player.y - 40, '-30', {
+            fontSize: '24px',
+            fill: '#ff4444',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: damageText,
+            y: damageText.y - 60,
+            scaleX: 1.5,
+            scaleY: 1.5,
+            alpha: 0,
+            duration: 800,
+            ease: 'Power2',
+            onComplete: () => damageText.destroy()
+        });
+
+        const missText = this.add.text(player.x, player.y - 80, 'MISSED! SELF DAMAGE!', {
+            fontSize: '18px',
+            fill: '#ff6666',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: missText,
+            y: missText.y - 40,
+            alpha: 0,
+            duration: 2000,
+            ease: 'Power2',
+            onComplete: () => missText.destroy()
+        });
+
+        // Flash player red
+        this.tweens.add({
+            targets: player,
+            alpha: 0.3,
+            duration: 100,
+            yoyo: true
+        });
+
+        // Check if player died from self-damage
+        if (player.health <= 0) {
+            const winner = player === this.player1 ? this.player2 : this.player1;
+            this.endBattle('knockout', winner);
+        }
+    }
+
+    performBloodGambit(player) {
+        // Check if player has enough HP (>30%)
+        const healthPercent = (player.health / player.stats.health) * 100;
+        if (healthPercent <= 30) {
+            // Show warning text
+            const warningText = this.add.text(player.x, player.y - 80, 'NOT ENOUGH HP!', {
+                fontSize: '18px',
+                fill: '#ffaa00',
+                fontStyle: 'bold',
+                stroke: '#000000',
+                strokeThickness: 3
+            }).setOrigin(0.5);
+
+            this.tweens.add({
+                targets: warningText,
+                y: warningText.y - 40,
+                alpha: 0,
+                duration: 1500,
+                onComplete: () => warningText.destroy()
+            });
+            return;
+        }
+
+        // Mark as used
+        player.gambitUsed = true;
+
+        // Pay HP cost (30% of max HP)
+        const cost = Math.floor(player.stats.health * 0.3);
+        player.health = Math.max(1, player.health - cost);
+        this.updateHealthBars();
+
+        // Show cost
+        const costText = this.add.text(player.x, player.y - 40, `-${cost}`, {
+            fontSize: '24px',
+            fill: '#ff4444',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 3
+        }).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: costText,
+            y: costText.y - 60,
+            scaleX: 1.5,
+            scaleY: 1.5,
+            alpha: 0,
+            duration: 800,
+            ease: 'Power2',
+            onComplete: () => costText.destroy()
+        });
+
+        // Blood flash effect
+        this.cameras.main.flash(200, 139, 0, 0, true);
+
+        // Select random buff
+        const buffs = player.weapon ? ['berserker', 'swift', 'iron', 'vampiric'] : ['berserker', 'swift', 'iron', 'vampiric', 'weapon'];
+        const selectedBuff = Phaser.Utils.Array.GetRandom(buffs);
+
+        this.applyBuff(player, selectedBuff);
+    }
+
+    applyBuff(player, buffType) {
+        player.buffActive = true;
+        player.buffType = buffType;
+
+        let buffName = '';
+        let buffColor = '#ffffff';
+        let duration = 8000; // 8 seconds default
+
+        switch (buffType) {
+            case 'berserker':
+                buffName = 'BERSERKER!';
+                buffColor = '#ff0000';
+                player.buffTimer = duration;
+                // +50% damage handled in calculateDamage
+                break;
+
+            case 'swift':
+                buffName = 'SWIFT STEP!';
+                buffColor = '#00aaff';
+                player.buffTimer = duration;
+                // +60% speed applied to stats
+                player.buffSpeedBonus = player.stats.speed * 0.6;
+                break;
+
+            case 'iron':
+                buffName = 'IRON SKIN!';
+                buffColor = '#888888';
+                player.buffTimer = 6000; // 6 seconds
+                // 50% damage reduction handled in dealDamage
+                break;
+
+            case 'vampiric':
+                buffName = 'VAMPIRIC!';
+                buffColor = '#aa00ff';
+                player.buffTimer = duration;
+                // Heal on hit handled in dealDamage
+                break;
+
+            case 'weapon':
+                buffName = 'WEAPON SUMMON!';
+                buffColor = '#ffd700';
+                // Spawn random weapon
+                const weaponTypes = ['sword', 'gun', 'shield', 'potion'];
+                const randomWeapon = Phaser.Utils.Array.GetRandom(weaponTypes);
+                this.spawnWeapon(randomWeapon, player.x, player.y + 40);
+                player.buffActive = false; // No timer for weapon summon
+                break;
+        }
+
+        // Show buff name
+        const buffText = this.add.text(player.x, player.y - 100, buffName, {
+            fontSize: '24px',
+            fill: buffColor,
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: buffText,
+            y: buffText.y - 40,
+            alpha: 0,
+            duration: 2000,
+            ease: 'Power2',
+            onComplete: () => buffText.destroy()
+        });
+
+        // Create visual effect for buff (except weapon)
+        if (buffType !== 'weapon') {
+            this.createBuffEffect(player, buffType);
+        }
+
+        // Play sound
+        if (window.audioManager) {
+            window.audioManager.playSound('battleStart');
+        }
+    }
+
+    createBuffEffect(player, buffType) {
+        let color, particleColor;
+
+        switch (buffType) {
+            case 'berserker': color = 0xff0000; particleColor = 0xff0000; break;
+            case 'swift': color = 0x00aaff; particleColor = 0x00aaff; break;
+            case 'iron': color = 0x888888; particleColor = 0x888888; break;
+            case 'vampiric': color = 0xaa00ff; particleColor = 0xaa00ff; break;
+        }
+
+        // Create particle effect
+        const particleEvent = this.time.addEvent({
+            delay: 100,
+            callback: () => {
+                if (player.buffActive && !this.gameEnded) {
+                    const particle = this.add.circle(
+                        player.x + Phaser.Math.Between(-20, 20),
+                        player.y + Phaser.Math.Between(-20, 20),
+                        3,
+                        particleColor,
+                        0.8
+                    );
+
+                    this.tweens.add({
+                        targets: particle,
+                        y: particle.y - 30,
+                        alpha: 0,
+                        duration: 800,
+                        onComplete: () => particle.destroy()
+                    });
+                }
+            },
+            repeat: -1
+        });
+
+        player.buffEffect = particleEvent;
+    }
+
+    updateBuffTimers(delta) {
+        // Update player 1 buff
+        if (this.player1.buffActive && this.player1.buffTimer > 0) {
+            this.player1.buffTimer -= delta;
+            if (this.player1.buffTimer <= 0) {
+                this.removeBuff(this.player1);
+            }
+        }
+
+        // Update player 2 buff
+        if (this.player2.buffActive && this.player2.buffTimer > 0) {
+            this.player2.buffTimer -= delta;
+            if (this.player2.buffTimer <= 0) {
+                this.removeBuff(this.player2);
+            }
+        }
+    }
+
+    removeBuff(player) {
+        player.buffActive = false;
+        player.buffType = null;
+        player.buffTimer = 0;
+
+        // Remove speed bonus
+        if (player.buffSpeedBonus) {
+            player.buffSpeedBonus = 0;
+        }
+
+        // Stop particle effect
+        if (player.buffEffect) {
+            player.buffEffect.destroy();
+            player.buffEffect = null;
+        }
+    }
+
     checkAttacks() {
         // Safety checks
         if (!this.player1 || !this.player2) {
             return;
         }
 
-        // Check if player 1 hits player 2
+        // Check if player 1 hits player 2 with sacrifice attack
+        if (this.player1.sacrificeAttacking && this.player1.attackHitbox && this.checkCollision(this.player1.attackHitbox, this.player2)) {
+            const baseDamage = this.calculateDamage(this.player1);
+            const sacrificeDamage = Math.floor(baseDamage * 2); // Double damage, rounded down
+            this.dealDamage(this.player2, sacrificeDamage, 'sacrifice', this.player1);
+            this.player1.sacrificeAttacking = false; // Prevent multiple hits
+            this.player1.sacrificeHit = true; // Mark that sacrifice hit
+
+            // Screen shake for sacrifice hit
+            this.cameras.main.shake(250, 0.03);
+
+            // Show SACRIFICE HIT text
+            const hitText = this.add.text(this.player2.x, this.player2.y - 100, 'SACRIFICE HIT!', {
+                fontSize: '20px',
+                fill: '#ff0000',
+                fontStyle: 'bold',
+                stroke: '#000000',
+                strokeThickness: 4
+            }).setOrigin(0.5);
+
+            this.tweens.add({
+                targets: hitText,
+                y: hitText.y - 40,
+                alpha: 0,
+                duration: 1500,
+                ease: 'Power2',
+                onComplete: () => hitText.destroy()
+            });
+        }
+
+        // Check if player 2 hits player 1 with sacrifice attack
+        if (this.player2.sacrificeAttacking && this.player2.attackHitbox && this.checkCollision(this.player2.attackHitbox, this.player1)) {
+            const baseDamage = this.calculateDamage(this.player2);
+            const sacrificeDamage = Math.floor(baseDamage * 2); // Double damage, rounded down
+            this.dealDamage(this.player1, sacrificeDamage, 'sacrifice', this.player2);
+            this.player2.sacrificeAttacking = false; // Prevent multiple hits
+            this.player2.sacrificeHit = true; // Mark that sacrifice hit
+
+            // Screen shake for sacrifice hit
+            this.cameras.main.shake(250, 0.03);
+
+            // Show SACRIFICE HIT text
+            const hitText = this.add.text(this.player1.x, this.player1.y - 100, 'SACRIFICE HIT!', {
+                fontSize: '20px',
+                fill: '#ff0000',
+                fontStyle: 'bold',
+                stroke: '#000000',
+                strokeThickness: 4
+            }).setOrigin(0.5);
+
+            this.tweens.add({
+                targets: hitText,
+                y: hitText.y - 40,
+                alpha: 0,
+                duration: 1500,
+                ease: 'Power2',
+                onComplete: () => hitText.destroy()
+            });
+        }
+
+        // Check if player 1 hits player 2 with regular attack
         if (this.player1.isAttacking && this.player1.attackHitbox && this.checkCollision(this.player1.attackHitbox, this.player2)) {
             const damage = this.calculateDamage(this.player1);
             this.dealDamage(this.player2, damage, this.player1.weapon ? this.player1.weapon.type : 'punch', this.player1);
             this.player1.isAttacking = false; // Prevent multiple hits
         }
 
-        // Check if player 2 hits player 1
+        // Check if player 2 hits player 1 with regular attack
         if (this.player2.isAttacking && this.player2.attackHitbox && this.checkCollision(this.player2.attackHitbox, this.player1)) {
             const damage = this.calculateDamage(this.player2);
             this.dealDamage(this.player1, damage, this.player2.weapon ? this.player2.weapon.type : 'punch', this.player2);
@@ -1321,6 +1845,16 @@ class BattleScene extends Phaser.Scene {
 
     calculateDamage(player) {
         let baseDamage = player.stats.damage;
+
+        // Apply Rage Mode bonus (Path of Fury passive ability)
+        if (player.abilityActive && player.playerData.statChoice === 'damage') {
+            baseDamage *= 1.5; // 50% damage increase in Rage Mode
+        }
+
+        // Apply Berserker buff (Blood Gambit)
+        if (player.buffActive && player.buffType === 'berserker') {
+            baseDamage *= 1.5; // 50% damage increase
+        }
 
         // Apply weapon modifiers
         if (player.weapon) {
@@ -1364,7 +1898,37 @@ class BattleScene extends Phaser.Scene {
             finalDamage = Math.ceil(damage * 0.5); // 50% damage reduction, rounded up
         }
 
+        // Apply Iron Skin buff (Blood Gambit)
+        if (target.buffActive && target.buffType === 'iron') {
+            finalDamage = Math.ceil(finalDamage * 0.5); // 50% damage reduction
+        }
+
         target.health -= finalDamage;
+
+        // Vampiric buff - heal attacker when dealing damage
+        if (attacker && attacker.buffActive && attacker.buffType === 'vampiric') {
+            const healAmount = 10;
+            attacker.health = Math.min(attacker.health + healAmount, attacker.stats.health);
+            this.updateHealthBars();
+
+            // Show heal effect on attacker
+            const healText = this.add.text(attacker.x, attacker.y - 60, `+${healAmount}`, {
+                fontSize: '18px',
+                fill: '#aa00ff',
+                fontStyle: 'bold',
+                stroke: '#000000',
+                strokeThickness: 3
+            }).setOrigin(0.5);
+
+            this.tweens.add({
+                targets: healText,
+                y: healText.y - 30,
+                alpha: 0,
+                duration: 800,
+                ease: 'Power2',
+                onComplete: () => healText.destroy()
+            });
+        }
 
         // Show damage number with style
         const damageColor = (target.weapon && target.weapon.type === 'shield') ? '#66ccff' : '#ff4444';
@@ -1498,28 +2062,32 @@ class BattleScene extends Phaser.Scene {
 
         // Show sudden death message
         const suddenDeathText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 50,
-            'SUDDEN DEATH!', {
+            'OVERTIME SACRIFICE!', {
             fontSize: '32px',
             fill: '#ff0000',
             fontStyle: 'bold',
             align: 'center'
         }).setOrigin(0.5);
 
+        const subtitleText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 10,
+            'Your life force drains...', {
+            fontSize: '18px',
+            fill: '#ff6666',
+            fontStyle: 'italic',
+            align: 'center'
+        }).setOrigin(0.5);
+
         // Flash effect
         this.tweens.add({
-            targets: suddenDeathText,
+            targets: [suddenDeathText, subtitleText],
             alpha: 0.3,
             duration: 500,
             yoyo: true,
             repeat: 3,
             onComplete: () => {
                 suddenDeathText.destroy();
+                subtitleText.destroy();
                 this.gameEnded = false;
-
-                // Set both players to 1 HP for sudden death
-                this.player1.health = 1;
-                this.player2.health = 1;
-                this.updateHealthBars();
 
                 // Flash health bars red
                 this.tweens.add({
@@ -1529,10 +2097,100 @@ class BattleScene extends Phaser.Scene {
                     yoyo: true
                 });
 
-                // Change timer to "SUDDEN DEATH"
-                this.timerText.setText('SUDDEN DEATH').setFill('#ff0000');
+                // Change timer to "OVERTIME"
+                this.timerText.setText('OVERTIME').setFill('#ff0000');
+
+                // Start HP drain - 5 HP per second for both players
+                this.overtimeDrainEvent = this.time.addEvent({
+                    delay: 1000, // Every 1 second
+                    callback: () => {
+                        if (!this.gameEnded) {
+                            // Drain 5 HP from both players
+                            this.player1.health = Math.max(0, this.player1.health - 5);
+                            this.player2.health = Math.max(0, this.player2.health - 5);
+                            this.updateHealthBars();
+
+                            // Create drain visual effect on both players
+                            this.createDrainEffect(this.player1);
+                            this.createDrainEffect(this.player2);
+
+                            // Check if anyone died from drain
+                            if (this.player1.health <= 0 && this.player2.health <= 0) {
+                                // Both died at same time - enter true sudden death mode!
+                                // Stop overtime drain
+                                if (this.overtimeDrainEvent) {
+                                    this.overtimeDrainEvent.destroy();
+                                    this.overtimeDrainEvent = null;
+                                }
+
+                                // Set both players to 1 HP
+                                this.player1.health = 1;
+                                this.player2.health = 1;
+                                this.updateHealthBars();
+
+                                // Show SUDDEN DEATH message
+                                const suddenDeathText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY - 50,
+                                    'SUDDEN DEATH!', {
+                                    fontSize: '32px',
+                                    fill: '#ff0000',
+                                    fontStyle: 'bold'
+                                }).setOrigin(0.5);
+
+                                const subtitleText = this.add.text(this.cameras.main.centerX, this.cameras.main.centerY + 10,
+                                    'First hit wins!', {
+                                    fontSize: '20px',
+                                    fill: '#fbbf24',
+                                    fontStyle: 'bold'
+                                }).setOrigin(0.5);
+
+                                // Flash effect
+                                this.tweens.add({
+                                    targets: [suddenDeathText, subtitleText],
+                                    alpha: 0.3,
+                                    duration: 500,
+                                    yoyo: true,
+                                    repeat: 3,
+                                    onComplete: () => {
+                                        suddenDeathText.destroy();
+                                        subtitleText.destroy();
+                                        this.gameEnded = false; // Resume the game!
+                                    }
+                                });
+
+                                // Update timer display
+                                this.timerText.setText('SUDDEN DEATH').setFill('#ff0000');
+                            } else if (this.player1.health <= 0) {
+                                this.endBattle('knockout', this.player2);
+                            } else if (this.player2.health <= 0) {
+                                this.endBattle('knockout', this.player1);
+                            }
+                        }
+                    },
+                    repeat: -1 // Keep draining until someone dies
+                });
             }
         });
+    }
+
+    createDrainEffect(player) {
+        // Dark red particles floating down (draining life)
+        for (let i = 0; i < 3; i++) {
+            const particle = this.add.circle(
+                player.x + Phaser.Math.Between(-15, 15),
+                player.y + Phaser.Math.Between(-20, 20),
+                2,
+                0x8b0000,
+                0.8
+            );
+
+            this.tweens.add({
+                targets: particle,
+                y: particle.y + 40,
+                alpha: 0,
+                duration: 1000,
+                onComplete: () => particle.destroy()
+            });
+        }
     }
 
     updateHealthBars() {
@@ -1554,6 +2212,12 @@ class BattleScene extends Phaser.Scene {
         if (this.battleTimerEvent) {
             this.battleTimerEvent.destroy();
             this.battleTimerEvent = null;
+        }
+
+        // Stop and clean up overtime drain
+        if (this.overtimeDrainEvent) {
+            this.overtimeDrainEvent.destroy();
+            this.overtimeDrainEvent = null;
         }
 
         // Determine winner
@@ -2228,6 +2892,12 @@ class BattleScene extends Phaser.Scene {
             if (bullet.sprite.x < this.arenaLeft ||
                 bullet.sprite.x > this.arenaRight ||
                 bullet.lifespan <= 0) {
+
+                // If this is a sacrifice bullet that missed, apply penalty
+                if (bullet.isSacrifice && !bullet.hit) {
+                    this.applySacrificeMissPenalty(bullet.shooter);
+                }
+
                 bullet.sprite.destroy();
                 return false;
             }
@@ -2239,6 +2909,11 @@ class BattleScene extends Phaser.Scene {
                         bullet.sprite.x <= platform.x + platform.width &&
                         bullet.sprite.y >= platform.y &&
                         bullet.sprite.y <= platform.y + platform.height) {
+
+                        // If this is a sacrifice bullet that hit platform, apply penalty
+                        if (bullet.isSacrifice && !bullet.hit) {
+                            this.applySacrificeMissPenalty(bullet.shooter);
+                        }
 
                         // Bullet hit platform
                         this.createBulletImpact(bullet.sprite.x, bullet.sprite.y);
@@ -2256,9 +2931,22 @@ class BattleScene extends Phaser.Scene {
             );
 
             if (distance < 25) { // Hit detection radius
-                // Deal damage
-                const damage = this.calculateDamage(bullet.shooter);
-                this.dealDamage(target, damage, 'gun', bullet.shooter);
+                // Check if this is a sacrifice bullet
+                if (bullet.isSacrifice) {
+                    // Mark as hit and deal double damage
+                    bullet.hit = true;
+                    bullet.shooter.sacrificeHit = true;
+                    const baseDamage = this.calculateDamage(bullet.shooter);
+                    const sacrificeDamage = baseDamage * 2;
+                    this.dealDamage(target, sacrificeDamage, 'sacrifice', bullet.shooter);
+
+                    // Enhanced screen shake for sacrifice bullet hit
+                    this.cameras.main.shake(250, 0.03);
+                } else {
+                    // Normal bullet damage
+                    const damage = this.calculateDamage(bullet.shooter);
+                    this.dealDamage(target, damage, 'gun', bullet.shooter);
+                }
 
                 // Create bullet impact effect
                 this.createBulletImpact(bullet.sprite.x, bullet.sprite.y);
@@ -2303,6 +2991,158 @@ class BattleScene extends Phaser.Scene {
             duration: 150,
             onComplete: () => impactFlash.destroy()
         });
+    }
+
+    updatePassiveAbilities(delta) {
+        // Check both players for passive ability triggers
+        this.checkPassiveAbility(this.player1, delta);
+        this.checkPassiveAbility(this.player2, delta);
+    }
+
+    checkPassiveAbility(player, delta) {
+        if (!player || player.abilityTriggered) return;
+
+        const healthPercent = (player.health / player.stats.health) * 100;
+
+        // Trigger ability when health drops below 30%
+        if (healthPercent < 30 && healthPercent > 0) {
+            player.abilityTriggered = true;
+
+            if (player.playerData.statChoice === 'damage') {
+                // PATH OF FURY - Rage Mode
+                this.activateRageMode(player);
+            } else if (player.playerData.statChoice === 'health') {
+                // PATH OF ENDURANCE - Second Wind
+                this.activateSecondWind(player);
+            }
+        }
+    }
+
+    activateRageMode(player) {
+        player.abilityActive = true;
+
+        // Create red rage particles (similar to healing but red)
+        const rageEffect = this.time.addEvent({
+            delay: 100,
+            callback: () => {
+                if (player.abilityActive && !this.gameEnded) {
+                    const particle = this.add.circle(
+                        player.x + Phaser.Math.Between(-20, 20),
+                        player.y + Phaser.Math.Between(-20, 20),
+                        3,
+                        0xff0000,
+                        0.8
+                    );
+
+                    this.tweens.add({
+                        targets: particle,
+                        y: particle.y - 30,
+                        alpha: 0,
+                        duration: 800,
+                        onComplete: () => particle.destroy()
+                    });
+                }
+            },
+            repeat: -1
+        });
+
+        player.abilityEffect = rageEffect; // Store for cleanup if needed
+
+        // Show "RAGE MODE!" text
+        const rageText = this.add.text(player.x, player.y - 80, 'RAGE MODE!', {
+            fontSize: '24px',
+            fill: '#ff0000',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: rageText,
+            y: rageText.y - 40,
+            alpha: 0,
+            duration: 2000,
+            ease: 'Power2',
+            onComplete: () => rageText.destroy()
+        });
+
+        // Play sound effect
+        if (window.audioManager) {
+            window.audioManager.playSound('battleStart');
+        }
+    }
+
+    activateSecondWind(player) {
+        player.abilityActive = true;
+        player.healingTimer = 3000; // 3 seconds of healing
+
+        // Heal 20 HP over 3 seconds
+        const healPerSecond = 20 / 3;
+        const healInterval = this.time.addEvent({
+            delay: 100, // Heal every 100ms for smooth effect
+            callback: () => {
+                if (player.healingTimer > 0 && player.health < player.stats.health) {
+                    const healAmount = healPerSecond / 10; // Divide by 10 since we're calling every 100ms
+                    player.health = Math.min(player.health + healAmount, player.stats.health);
+                    this.updateHealthBars();
+
+                    player.healingTimer -= 100;
+                } else {
+                    healInterval.destroy();
+                }
+            },
+            repeat: 29 // 3 seconds = 30 * 100ms
+        });
+
+        // Create green healing particles
+        const healEffect = this.time.addEvent({
+            delay: 100,
+            callback: () => {
+                if (player.healingTimer > 0) {
+                    const particle = this.add.circle(
+                        player.x + Phaser.Math.Between(-20, 20),
+                        player.y + Phaser.Math.Between(-20, 20),
+                        3,
+                        0x00ff00,
+                        0.8
+                    );
+
+                    this.tweens.add({
+                        targets: particle,
+                        y: particle.y - 30,
+                        alpha: 0,
+                        duration: 800,
+                        onComplete: () => particle.destroy()
+                    });
+                } else {
+                    healEffect.destroy();
+                }
+            },
+            repeat: 29
+        });
+
+        // Show "SECOND WIND!" text
+        const windText = this.add.text(player.x, player.y - 80, 'SECOND WIND!', {
+            fontSize: '24px',
+            fill: '#00ff00',
+            fontStyle: 'bold',
+            stroke: '#000000',
+            strokeThickness: 4
+        }).setOrigin(0.5);
+
+        this.tweens.add({
+            targets: windText,
+            y: windText.y - 40,
+            alpha: 0,
+            duration: 2000,
+            ease: 'Power2',
+            onComplete: () => windText.destroy()
+        });
+
+        // Play sound effect
+        if (window.audioManager) {
+            window.audioManager.playSound('healthPickup');
+        }
     }
 
     preload() {

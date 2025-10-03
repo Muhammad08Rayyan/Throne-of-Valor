@@ -14,8 +14,7 @@ const config = {
         TournamentResultsScene
     ],
     scale: {
-        mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
+        mode: Phaser.Scale.NONE,
         width: 1280,
         height: 720
     }

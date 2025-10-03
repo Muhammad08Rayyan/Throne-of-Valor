@@ -10,82 +10,171 @@ class InstructionsScene extends Phaser.Scene {
         // Dark overlay
         this.add.rectangle(centerX, centerY, this.cameras.main.width, this.cameras.main.height, 0x000000, 0.9);
 
-        // Instructions popup with improved styling (sized for 1280x720)
-        const popupWidth = 800;
-        const popupHeight = 600;
-        const popupShadow = this.add.rectangle(centerX + 5, centerY + 5, popupWidth, popupHeight, 0x000000, 0.4);
+        // Instructions popup
+        const popupWidth = 1100;
+        const popupHeight = 650;
         const popup = this.add.rectangle(centerX, centerY, popupWidth, popupHeight, 0x1e293b)
             .setStrokeStyle(4, 0x8b5cf6);
 
-        // Popup glow effect
-        const glow = this.add.rectangle(centerX, centerY, popupWidth + 20, popupHeight + 20, 0x8b5cf6, 0.1);
+        // Popup glow
+        const glow = this.add.rectangle(centerX, centerY, popupWidth + 20, popupHeight + 20, 0x8b5cf6, 0.15);
 
+        // Title
+        this.add.text(centerX, centerY - 290, '⚔️ THRONE OF VALOR - HOW TO PLAY ⚔️', {
+            fontSize: '28px',
+            fill: '#fbbf24',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
 
-        // Instructions text with better spacing
-        const instructions = [
-            '⚔️ THE THRONE AWAITS ⚔️',
+        // Column layout
+        const leftX = centerX - 350;
+        const rightX = centerX + 120;
+        let leftY = centerY - 240;
+        let rightY = centerY - 240;
+
+        // LEFT COLUMN - Basic Controls & Mechanics
+        this.add.text(leftX, leftY, '🎮 PLAYER CONTROLS', {
+            fontSize: '18px',
+            fill: '#60a5fa',
+            fontStyle: 'bold'
+        }).setOrigin(0, 0.5);
+        leftY += 30;
+
+        const controls = [
+            'P1: WASD = Move | SPACE = Attack',
+            'P1: Double-tap A/D = Dash',
+            'P1: E = Sacrifice | Q = Blood Gambit',
             '',
-            '• Warriors gather to claim the ultimate prize',
-            '• Only the worthy shall ascend to the Throne of Valor',
-            '• Each battle determines the fate of legends',
-            '• Your legacy hangs in the balance',
-            '',
-            '🛡️ CHOOSE YOUR DESTINY 🛡️',
-            '• Before each clash, forge your warrior\'s path:',
-            '  - PATH OF FURY: Unleash devastating power, risk frailty',
-            '  - PATH OF ENDURANCE: Become unbreakable, temper your strike',
-            '  - PATH OF BALANCE: Walk the middle road of ancient masters',
-            '',
-            '👑 CLAIM YOUR BIRTHRIGHT 👑',
-            '• Conquer all who stand before you',
-            '• Etch your name in the annals of history',
-            '• The throne remembers only the victorious!'
+            'P2: ARROWS = Move | SHIFT = Attack',
+            'P2: Double-tap ←/→ = Dash',
+            'P2: ENTER = Sacrifice | CTRL = Blood Gambit'
         ];
 
-        instructions.forEach((line, index) => {
-            const isHeader = line.includes('⚔️') || line.includes('🛡️') || line.includes('👑');
-            const fontSize = isHeader ? '22px' : '17px';
-            const color = isHeader ? '#fbbf24' : '#e2e8f0';
-
-            this.add.text(centerX, centerY - 240 + (index * 27), line, {
-                fontSize: fontSize,
-                fill: color,
-                fontStyle: isHeader ? 'bold' : 'normal'
-            }).setOrigin(0.5);
+        controls.forEach(line => {
+            this.add.text(leftX, leftY, line, {
+                fontSize: '13px',
+                fill: '#cbd5e1'
+            }).setOrigin(0, 0.5);
+            leftY += line === '' ? 10 : 20;
         });
 
-        // OK button with improved styling
-        const buttonShadow = this.add.rectangle(centerX + 3, centerY + 273, 180, 60, 0x000000, 0.3);
-        const okButton = this.add.rectangle(centerX, centerY + 270, 180, 60, 0x10b981)
+        leftY += 10;
+
+        // Combat Mechanics
+        this.add.text(leftX, leftY, '⚔️ COMBAT MECHANICS', {
+            fontSize: '18px',
+            fill: '#f87171',
+            fontStyle: 'bold'
+        }).setOrigin(0, 0.5);
+        leftY += 30;
+
+        const combat = [
+            '• Weapons spawn every 5 seconds',
+            '• Sword: 2x damage, melee',
+            '• Gun: Ranged shots',
+            '• Shield: 50% damage reduction',
+            '• Potion: Heal 20 HP instantly',
+            '',
+            '• Arenas have instant-kill hazards',
+            '• 30-second rounds → Overtime'
+        ];
+
+        combat.forEach(line => {
+            this.add.text(leftX, leftY, line, {
+                fontSize: '13px',
+                fill: '#cbd5e1'
+            }).setOrigin(0, 0.5);
+            leftY += line === '' ? 10 : 20;
+        });
+
+        // RIGHT COLUMN - Sacrifice Mechanics
+        this.add.text(rightX, rightY, '🩸 SACRIFICE MECHANICS (Once Per Match)', {
+            fontSize: '18px',
+            fill: '#c084fc',
+            fontStyle: 'bold'
+        }).setOrigin(0, 0.5);
+        rightY += 35;
+
+        const sacrifice = [
+            '1️⃣ SACRIFICE ATTACK (E / ENTER):',
+            '   • Deals 2x damage if it hits',
+            '   • You lose 30 HP if you miss',
+            '   • Adapts to equipped weapon (melee/gun)',
+            '',
+            '2️⃣ BLOOD GAMBIT (Q / CTRL):',
+            '   • Costs 30% of max HP to activate',
+            '   • Can\'t use if HP ≤ 30%',
+            '   • Random buff for 6-8 seconds:',
+            '',
+            '   🔴 BERSERKER: +50% damage',
+            '   🔵 SWIFT STEP: +60% movement speed',
+            '   ⚪ IRON SKIN: -50% damage taken',
+            '   🟣 VAMPIRIC: Heal 10 HP per hit',
+            '   🟡 WEAPON: Random weapon (if unarmed)',
+            '',
+            '3️⃣ OVERTIME SACRIFICE:',
+            '   • If time runs out, both lose 5 HP/sec',
+            '   • Last warrior standing wins!'
+        ];
+
+        sacrifice.forEach(line => {
+            const isHeader = line.includes('1️⃣') || line.includes('2️⃣') || line.includes('3️⃣');
+            this.add.text(rightX, rightY, line, {
+                fontSize: isHeader ? '14px' : '12px',
+                fill: isHeader ? '#a78bfa' : '#cbd5e1',
+                fontStyle: isHeader ? 'bold' : 'normal'
+            }).setOrigin(0, 0.5);
+            rightY += line === '' ? 8 : (isHeader ? 22 : 18);
+        });
+
+        // Character Paths Section (Bottom)
+        let bottomY = centerY + 180;
+        this.add.text(centerX, bottomY, '🛡️ CHARACTER PATHS (Choose Before Each Battle)', {
+            fontSize: '18px',
+            fill: '#34d399',
+            fontStyle: 'bold'
+        }).setOrigin(0.5);
+        bottomY += 30;
+
+        const paths = [
+            'PATH OF FURY: 80 HP • 25 DMG | Rage Mode: +50% DMG when HP < 30%',
+            'PATH OF ENDURANCE: 120 HP • 15 DMG | Second Wind: Heal 20 HP when HP < 30%'
+        ];
+
+        paths.forEach(line => {
+            this.add.text(centerX, bottomY, line, {
+                fontSize: '13px',
+                fill: '#cbd5e1'
+            }).setOrigin(0.5);
+            bottomY += 22;
+        });
+
+        // OK button
+        const buttonY = centerY + 280;
+        const okButton = this.add.rectangle(centerX, buttonY, 200, 50, 0x8b5cf6)
             .setInteractive()
-            .setStrokeStyle(3, 0x059669);
+            .setStrokeStyle(3, 0x7c3aed);
 
-        const buttonGlow = this.add.rectangle(centerX, centerY + 270, 190, 70, 0x10b981, 0.2);
-
-        this.add.text(centerX, centerY + 270, 'GOT IT!', {
-            fontSize: '22px',
+        this.add.text(centerX, buttonY, 'LET\'S FIGHT!', {
+            fontSize: '20px',
             fill: '#ffffff',
             fontStyle: 'bold'
         }).setOrigin(0.5);
 
         okButton.on('pointerdown', () => {
-            // Play click sound
             if (window.audioManager) {
                 window.audioManager.playSound('buttonClick');
             }
             this.closeInstructions();
         });
         okButton.on('pointerover', () => {
-            // Play hover sound
             if (window.audioManager) {
                 window.audioManager.playSound('buttonHover');
             }
-            okButton.setFillStyle(0x059669);
-            buttonGlow.setAlpha(0.4);
+            okButton.setFillStyle(0x7c3aed);
         });
         okButton.on('pointerout', () => {
-            okButton.setFillStyle(0x10b981);
-            buttonGlow.setAlpha(0.2);
+            okButton.setFillStyle(0x8b5cf6);
         });
     }
 

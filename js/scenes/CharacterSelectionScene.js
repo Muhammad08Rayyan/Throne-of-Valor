@@ -75,8 +75,20 @@ class CharacterSelectionScene extends Phaser.Scene {
 
         // Stat choices
         const choices = [
-            { key: 'damage', label: 'PATH OF FURY', desc: 'Unleash devastating power, risk frailty', color: 0xe74c3c },
-            { key: 'health', label: 'PATH OF ENDURANCE', desc: 'Become unbreakable, temper your strike', color: 0x27ae60 }
+            {
+                key: 'damage',
+                label: 'PATH OF FURY',
+                desc1: 'High damage, low health',
+                desc2: 'Rage Mode: +50% damage when HP < 30%',
+                color: 0xe74c3c
+            },
+            {
+                key: 'health',
+                label: 'PATH OF ENDURANCE',
+                desc1: 'High health, low damage',
+                desc2: 'Second Wind: Heal 20 HP when HP < 30%',
+                color: 0x27ae60
+            }
         ];
 
         choices.forEach((choice, index) => {
@@ -87,15 +99,21 @@ class CharacterSelectionScene extends Phaser.Scene {
                 .setStrokeStyle(3, choice.color)
                 .setAlpha(0.5);
 
-            this.add.text(x, choiceY - 10, choice.label, {
+            this.add.text(x, choiceY - 15, choice.label, {
                 fontSize: '18px',
                 fill: '#ffffff',
                 fontStyle: 'bold'
             }).setOrigin(0.5);
 
-            this.add.text(x, choiceY + 15, choice.desc, {
-                fontSize: '14px',
+            this.add.text(x, choiceY + 8, choice.desc1, {
+                fontSize: '13px',
                 fill: '#ecf0f1'
+            }).setOrigin(0.5);
+
+            this.add.text(x, choiceY + 25, choice.desc2, {
+                fontSize: '12px',
+                fill: '#95a5a6',
+                fontStyle: 'italic'
             }).setOrigin(0.5);
 
             // Store button reference for later access
